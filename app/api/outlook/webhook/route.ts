@@ -61,7 +61,6 @@ export async function POST(request: NextRequest) {
 
         // You could emit a server-sent event or WebSocket message here
         // to notify the client to refresh their calendar view
-        console.log(`Calendar event ${changeType}:`, resource);
       }
     }
 

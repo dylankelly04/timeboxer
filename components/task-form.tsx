@@ -67,7 +67,7 @@ export function TaskForm({ open, onOpenChange, editingTask }: TaskFormProps) {
       dueDate,
       timeRequired: Number.parseInt(timeRequired),
       completed: editingTask?.completed ?? false,
-      scheduledTime: editingTask?.scheduledTime,
+      scheduledTime: editingTask?.scheduledTime || undefined,
     };
 
     try {

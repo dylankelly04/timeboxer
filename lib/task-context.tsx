@@ -89,6 +89,24 @@ export function TaskProvider({ children }: { children: ReactNode }) {
 
         const newTask = await response.json();
         setTasks((prev) => [newTask, ...prev]);
+
+        // Sync to Outlook if task is scheduled
+        if (newTask.scheduledTime) {
+          try {
+            await fetch("/api/outlook/sync", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                taskId: newTask.id,
+                action: "create",
+              }),
+            });
+          } catch (error) {
+            // Silently fail - Outlook sync is optional
+            console.error("Failed to sync to Outlook:", error);
+          }
+        }
+
         return newTask;
       } catch (error) {
         console.error("Error adding task:", error);

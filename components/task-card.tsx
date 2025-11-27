@@ -1,13 +1,11 @@
 "use client";
 
-import type React from "react";
-
 import { useState } from "react";
+import type React from "react";
 import { format } from "date-fns";
-import { GripVertical, Clock, Calendar, Trash2, Edit2 } from "lucide-react";
+import { Clock, Calendar, Trash2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import type { Task } from "@/lib/types";
 import { useTasks } from "@/lib/task-context";
@@ -35,10 +33,38 @@ export function TaskCard({
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   };
 
-  const isOverdue = new Date(task.dueDate) < new Date() && !task.completed;
   const isScheduled = !!task.scheduledTime;
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't open edit if clicking on delete button
+    const target = e.target as HTMLElement;
+    if (target.closest('button[type="button"]')) {
+      return;
+    }
+    onEdit(task);
+  };
+
+  const handleDoubleClick = async (e: React.MouseEvent) => {
+    // Don't toggle if clicking on delete button
+    const target = e.target as HTMLElement;
+    if (target.closest('button[type="button"]')) {
+      return;
+    }
+    e.stopPropagation();
+    try {
+      await updateTask(task.id, { completed: !task.completed });
+    } catch (error) {
+      console.error("Failed to update task:", error);
+    }
+  };
+
   const handleDragStart = (e: React.DragEvent) => {
+    // Don't start drag if clicking on buttons
+    const target = e.target as HTMLElement;
+    if (target.closest('button[type="button"]')) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData("taskId", task.id);
     if (fromDate) {
       e.dataTransfer.setData("fromDay", fromDate.toISOString());
@@ -49,7 +75,7 @@ export function TaskCard({
   return (
     <Card
       className={cn(
-        "group relative p-3 transition-all duration-200 cursor-grab active:cursor-grabbing",
+        "group relative p-3 transition-all duration-200 cursor-pointer",
         "hover:shadow-md hover:border-primary/30",
         isDragging && "opacity-50 shadow-lg rotate-2",
         task.completed && "opacity-60",
@@ -57,22 +83,12 @@ export function TaskCard({
       )}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
+      onClick={handleCardClick}
+      onDoubleClick={handleDoubleClick}
       draggable
       onDragStart={handleDragStart}
     >
       <div className="flex items-start gap-2">
-        <div className="mt-0.5 text-muted-foreground/50 cursor-grab">
-          <GripVertical className="h-4 w-4" />
-        </div>
-
-        <Checkbox
-          checked={task.completed}
-          onCheckedChange={(checked) =>
-            updateTask(task.id, { completed: checked as boolean })
-          }
-          className="mt-0.5"
-        />
-
         <div className="flex-1 min-w-0">
           <h4
             className={cn(
@@ -89,17 +105,12 @@ export function TaskCard({
             </p>
           )}
 
-          <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground whitespace-nowrap">
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
               {formatDuration(task.timeRequired)}
             </span>
-            <span
-              className={cn(
-                "flex items-center gap-1",
-                isOverdue && "text-destructive"
-              )}
-            >
+            <span className="flex items-center gap-1 whitespace-nowrap">
               <Calendar className="h-3 w-3" />
               {format(new Date(task.dueDate + "T00:00:00"), "MMM d")}
             </span>
@@ -111,20 +122,33 @@ export function TaskCard({
             "flex items-center gap-1 transition-opacity",
             showActions ? "opacity-100" : "opacity-0"
           )}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
-            onClick={() => onEdit(task)}
+            className="h-7 w-7 text-green-600 hover:text-green-700 dark:text-green-500 dark:hover:text-green-400"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                await updateTask(task.id, { completed: !task.completed });
+              } catch (error) {
+                console.error("Failed to update task:", error);
+              }
+            }}
+            title={task.completed ? "Mark as incomplete" : "Mark as complete"}
           >
-            <Edit2 className="h-3.5 w-3.5" />
+            <Check className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-destructive hover:text-destructive"
-            onClick={() => deleteTask(task.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              deleteTask(task.id);
+            }}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>

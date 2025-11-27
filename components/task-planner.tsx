@@ -34,7 +34,21 @@ function TaskPlannerContent() {
 
       <div className="flex-1 flex min-h-0">
         <TaskListView onAddTask={handleAddTask} onEditTask={handleEditTask} />
-        <CalendarView />
+        <CalendarView onAddTask={(date, scheduledTime, duration) => {
+          // Create a task object with the scheduled time and duration pre-filled
+          const taskDate = format(date, "yyyy-MM-dd")
+          setEditingTask({
+            id: "",
+            title: "",
+            description: "",
+            startDate: taskDate,
+            dueDate: taskDate,
+            timeRequired: duration || 30,
+            completed: false,
+            scheduledTime: scheduledTime || undefined,
+          })
+          setIsFormOpen(true)
+        }} />
       </div>
 
       <TaskForm

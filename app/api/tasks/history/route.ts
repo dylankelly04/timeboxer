@@ -23,10 +23,19 @@ export async function GET() {
       )
       .orderBy(asc(taskHistory.date));
 
+    // Aggregate minutes worked per day
+    const minutesPerDay: Record<string, number> = {};
+    history.forEach((entry) => {
+      if (!minutesPerDay[entry.date]) {
+        minutesPerDay[entry.date] = 0;
+      }
+      minutesPerDay[entry.date] += entry.minutesWorked || 0;
+    });
+
     // Convert to the format expected by ContributionGraph
-    const formattedHistory = history.map((history) => ({
-      date: history.date,
-      completed: history.completed,
+    const formattedHistory = Object.entries(minutesPerDay).map(([date, minutesWorked]) => ({
+      date,
+      minutesWorked,
     }));
 
     return NextResponse.json(formattedHistory);

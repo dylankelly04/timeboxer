@@ -1,15 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSession, signIn, signOut } from "next-auth/react";
-import {
-  User,
-  Mail,
-  Lock,
-  LogOut,
-  Loader2,
-  Calendar as CalendarIcon,
-} from "lucide-react";
+import { useState } from "react";
+import { useSession, signIn } from "next-auth/react";
+import { User, Mail, Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +13,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { ContributionGraph } from "./contribution-graph";
+import { ProfileIntegrations } from "./profile-integrations";
+import { ProfileActivity } from "./profile-activity";
 
 interface ProfileDialogProps {
   open: boolean;
@@ -34,12 +28,6 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
-  const [taskHistory, setTaskHistory] = useState<
-    Array<{ date: string; completed: boolean }>
-  >([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [outlookConnected, setOutlookConnected] = useState(false);
-  const [isLoadingOutlook, setIsLoadingOutlook] = useState(false);
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,46 +73,9 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
     }
   };
 
-  const handleSignOut = async () => {
-    await signOut({ redirect: false });
+  const handleSignOut = () => {
     onOpenChange(false);
   };
-
-  // Fetch task history when dialog opens and user is logged in
-  useEffect(() => {
-    if (open && session?.user) {
-      setIsLoadingHistory(true);
-      fetch("/api/tasks/history")
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) {
-            setTaskHistory(data);
-          } else {
-            console.error("API returned non-array for task history:", data);
-            setTaskHistory([]);
-          }
-        })
-        .catch((err) => {
-          console.error("Error fetching task history:", err);
-        })
-        .finally(() => {
-          setIsLoadingHistory(false);
-        });
-
-      // Check Outlook connection status
-      fetch("/api/outlook/status")
-        .then((res) => res.json())
-        .then((data) => {
-          setOutlookConnected(data.connected || false);
-        })
-        .catch((error) => {
-          console.error("Error fetching Outlook status:", error);
-        });
-    } else {
-      setTaskHistory([]);
-      setOutlookConnected(false);
-    }
-  }, [open, session]);
 
   if (status === "loading") {
     return (
@@ -140,17 +91,16 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
       </Dialog>
     );
   }
-
   if (session?.user) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           className="flex flex-col"
           style={{
-            width: "60vw",
-            height: "80vh",
-            maxWidth: "60vw",
-            maxHeight: "80vh",
+            width: "35vw",
+            height: "50vh",
+            maxWidth: "35vw",
+            maxHeight: "70vh",
           }}
         >
           <DialogHeader>
@@ -160,94 +110,30 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4 flex-1 overflow-y-auto">
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex items-center justify-center gap-4">
               {session.user.image ? (
                 <img
                   src={session.user.image}
                   alt={session.user.name || "User"}
-                  className="w-16 h-16 rounded-full"
+                  className="w-16 h-16 rounded-full shrink-0"
                 />
               ) : (
-                <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center">
+                <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center shrink-0">
                   <User className="h-8 w-8 text-primary-foreground" />
                 </div>
               )}
-              <div className="text-center">
+              <div className="min-w-0">
                 <h3 className="font-semibold">{session.user.name || "User"}</h3>
                 <p className="text-sm text-muted-foreground">
                   {session.user.email}
                 </p>
               </div>
-              <div className="flex flex-col gap-2 w-full max-w-xs">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full gap-2 justify-start"
-                  onClick={async () => {
-                    if (outlookConnected) {
-                      // Disconnect
-                      setIsLoadingOutlook(true);
-                      try {
-                        const response = await fetch("/api/outlook/disconnect", {
-                          method: "POST",
-                        });
-                        if (response.ok) {
-                          setOutlookConnected(false);
-                        }
-                      } catch (error) {
-                        console.error("Error disconnecting Outlook:", error);
-                      } finally {
-                        setIsLoadingOutlook(false);
-                      }
-                    } else {
-                      // Connect
-                      setIsLoadingOutlook(true);
-                      try {
-                        const response = await fetch("/api/auth/outlook");
-                        const data = await response.json();
-                        if (data.authUrl) {
-                          window.location.href = data.authUrl;
-                        } else {
-                          setError("Failed to initiate Outlook connection");
-                          setIsLoadingOutlook(false);
-                        }
-                      } catch (error) {
-                        console.error("Error connecting Outlook:", error);
-                        setError("Failed to connect Outlook");
-                        setIsLoadingOutlook(false);
-                      }
-                    }
-                  }}
-                  disabled={isLoadingOutlook}
-                >
-                  {isLoadingOutlook ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <CalendarIcon className="h-3.5 w-3.5" />
-                  )}
-                  {outlookConnected ? "Disconnect Outlook" : "Connect Outlook Calendar"}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSignOut}
-                  className="w-full gap-2 justify-start"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  Sign Out
-                </Button>
-              </div>
+            </div>
+            <div className="flex justify-center">
+              <ProfileIntegrations onSignOut={handleSignOut} />
             </div>
 
-            <div className="flex-1">
-              {isLoadingHistory ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <ContributionGraph tasks={taskHistory} days={365} />
-              )}
-            </div>
+            <ProfileActivity />
           </div>
         </DialogContent>
       </Dialog>

@@ -25,7 +25,11 @@ interface OutlookEvent {
   body?: { content: string }
 }
 
-export function CalendarView() {
+interface CalendarViewProps {
+  onAddTask?: (date: Date, scheduledTime?: string, duration?: number) => void
+}
+
+export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
   const { tasks, scheduleTask, unscheduleTask } = useTasks()
   const { data: session } = useSession()
   const [calendarMode, setCalendarMode] = useState<CalendarMode>("1-day")
@@ -33,6 +37,9 @@ export function CalendarView() {
   const [dragOverSlot, setDragOverSlot] = useState<{ date: Date; hour: number } | null>(null)
   const [outlookEvents, setOutlookEvents] = useState<OutlookEvent[]>([])
   const [isLoadingOutlookEvents, setIsLoadingOutlookEvents] = useState(false)
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false)
+  const [createEventStart, setCreateEventStart] = useState<{ date: Date; hour: number; minutes: number; top: number } | null>(null)
+  const [createEventEnd, setCreateEventEnd] = useState<{ date: Date; hour: number; minutes: number; top: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Get user's timezone
@@ -158,6 +165,80 @@ export function CalendarView() {
     setDragOverSlot(null)
   }
 
+  const handleMouseDown = (e: React.MouseEvent, date: Date, hour: number) => {
+    // Only start creating if clicking on empty space (not on a task or event)
+    // Check if the click target is the hour slot itself or a child element that's not a task/event
+    const target = e.target as HTMLElement
+    const isTaskOrEvent = target.closest('[draggable="true"]') || target.closest('.bg-blue-100') || target.closest('.bg-primary')
+
+    if (!isTaskOrEvent && (target.classList.contains("hour-slot") || target.closest(".hour-slot"))) {
+      e.preventDefault()
+      e.stopPropagation()
+
+      // Find the day column container (parent with class containing "flex-1 relative")
+      const dayColumn = target.closest('[class*="flex-1 relative"]') as HTMLElement
+      if (!dayColumn) return
+
+      const rect = dayColumn.getBoundingClientRect()
+      const y = e.clientY - rect.top
+      const exactHour = (y / HOUR_HEIGHT) + START_HOUR
+      const hourFloor = Math.floor(exactHour)
+      // Round to nearest 30 minutes
+      const minutes = Math.round((exactHour - hourFloor) * 60 / 30) * 30
+      const top = (hourFloor - START_HOUR + minutes / 60) * HOUR_HEIGHT
+
+      setIsCreatingEvent(true)
+      setCreateEventStart({ date, hour: hourFloor, minutes, top })
+      setCreateEventEnd({ date, hour: hourFloor, minutes, top })
+    }
+  }
+
+  const handleMouseMove = (e: React.MouseEvent, date: Date) => {
+    if (!isCreatingEvent || !createEventStart) return
+
+    // Get the exact position within the day column (the currentTarget is the day column div)
+    const dayColumn = e.currentTarget as HTMLElement
+    const rect = dayColumn.getBoundingClientRect()
+    const y = e.clientY - rect.top
+    // Calculate exact hour with minutes, rounded to nearest 30 minutes
+    const exactHour = Math.max(START_HOUR, Math.min(END_HOUR, (y / HOUR_HEIGHT) + START_HOUR))
+    const hourFloor = Math.floor(exactHour)
+    // Round to nearest 30 minutes
+    const minutes = Math.round((exactHour - hourFloor) * 60 / 30) * 30
+    const top = (hourFloor - START_HOUR + minutes / 60) * HOUR_HEIGHT
+
+    setCreateEventEnd({ date, hour: hourFloor, minutes, top })
+  }
+
+  const handleMouseUp = () => {
+    if (!isCreatingEvent || !createEventStart || !createEventEnd) {
+      setIsCreatingEvent(false)
+      setCreateEventStart(null)
+      setCreateEventEnd(null)
+      return
+    }
+
+    // Calculate the scheduled time from the start position (with exact minutes)
+    const startDate = setMinutes(setHours(createEventStart.date, createEventStart.hour), createEventStart.minutes)
+    const scheduledTime = startDate.toISOString()
+
+    // Calculate exact duration in minutes (allows for half-hours, etc.)
+    const startTotalMinutes = createEventStart.hour * 60 + createEventStart.minutes
+    const endTotalMinutes = createEventEnd.hour * 60 + createEventEnd.minutes
+    let duration = Math.max(15, endTotalMinutes - startTotalMinutes) // Minimum 15 minutes
+    // Round to nearest 15 minutes for cleaner durations
+    duration = Math.round(duration / 15) * 15
+
+    // Open task form with pre-filled scheduled time and duration
+    if (onAddTask) {
+      onAddTask(createEventStart.date, scheduledTime, duration)
+    }
+
+    setIsCreatingEvent(false)
+    setCreateEventStart(null)
+    setCreateEventEnd(null)
+  }
+
   const getTaskPosition = (task: Task) => {
     if (!task.scheduledTime) return null
     const taskDate = new Date(task.scheduledTime)
@@ -267,21 +348,57 @@ export function CalendarView() {
                 : null
 
             return (
-              <div key={date.toISOString()} className={cn("flex-1 relative", dayIndex > 0 && "border-l border-border")}>
+              <div
+                key={date.toISOString()}
+                className={cn("flex-1 relative", dayIndex > 0 && "border-l border-border")}
+                onMouseMove={(e) => {
+                  if (isCreatingEvent) {
+                    handleMouseMove(e, date)
+                  }
+                }}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              >
                 {/* Hour grid lines */}
                 {hours.map((hour) => {
                   const isOver = dragOverSlot?.date.getTime() === date.getTime() && dragOverSlot?.hour === hour
+
                   return (
                     <div
                       key={hour}
-                      className={cn("absolute left-0 right-0 border-t border-border", isOver && "bg-primary/10")}
+                      className={cn(
+                        "absolute left-0 right-0 border-t border-border hour-slot cursor-pointer",
+                        isOver && "bg-primary/10"
+                      )}
                       style={{ top: (hour - START_HOUR) * HOUR_HEIGHT, height: HOUR_HEIGHT }}
                       onDragOver={(e) => handleDragOver(e, date, hour)}
                       onDrop={(e) => handleDrop(e, date, hour)}
                       onDragLeave={handleDragLeave}
+                      onMouseDown={(e) => {
+                        // Only start creating if not dragging a task
+                        if (e.button === 0 && !e.defaultPrevented) {
+                          handleMouseDown(e, date, hour)
+                        }
+                      }}
                     />
                   )
                 })}
+
+                {/* Visual indicator for creating event */}
+                {isCreatingEvent && createEventStart && createEventEnd &&
+                 createEventStart.date.getTime() === date.getTime() && (
+                  <div
+                    className="absolute left-1 right-1 rounded bg-primary/20 border-2 border-primary border-dashed pointer-events-none z-30"
+                    style={{
+                      top: Math.min(createEventStart.top, createEventEnd.top),
+                      height: Math.max(Math.abs(createEventEnd.top - createEventStart.top), HOUR_HEIGHT / 2),
+                    }}
+                  >
+                    <div className="p-1 text-xs text-primary font-medium">
+                      New event
+                    </div>
+                  </div>
+                )}
 
                 {/* Current time indicator */}
                 {currentTimeTop !== null && (

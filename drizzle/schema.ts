@@ -57,6 +57,7 @@ export const taskHistory = sqliteTable(
     completed: integer("completed", { mode: "boolean" })
       .notNull()
       .default(false),
+    minutesWorked: integer("minutesWorked").notNull().default(0), // Minutes worked on this task
     createdAt: integer("createdAt", { mode: "timestamp" })
       .notNull()
       .$defaultFn(() => new Date()),

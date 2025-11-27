@@ -63,6 +63,7 @@ export async function PUT(
             .set({
               date: today,
               completed: true,
+              minutesWorked: existingTask.timeRequired,
             })
             .where(eq(taskHistory.taskId, id));
         } else {
@@ -71,6 +72,7 @@ export async function PUT(
             taskId: id,
             date: today,
             completed: true,
+            minutesWorked: existingTask.timeRequired,
           });
         }
       } else {
