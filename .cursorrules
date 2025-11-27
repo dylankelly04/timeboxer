@@ -1,0 +1,48 @@
+# Cursor Rules for Timeboxer Project
+
+## Database Management with Turso
+
+When creating new database tables or modifying schema:
+
+1. **Always use a script approach for Turso**: Drizzle's `db:push` may not reliably detect changes with Turso/libSQL. Instead:
+   - Create a script in `scripts/` directory
+   - Load `.env.local` using `dotenv` to get `DATABASE_URL` and `TURSO_AUTH_TOKEN`
+   - Use `@libsql/client`'s `createClient` to connect directly to Turso
+   - Execute raw SQL using `client.execute()`
+   - Always verify the table was created
+
+2. **Script Template**:
+   ```typescript
+   import { createClient } from "@libsql/client";
+   import * as dotenv from "dotenv";
+   import * as path from "path";
+
+   dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
+
+   const databaseUrl = process.env.DATABASE_URL;
+   const authToken = process.env.TURSO_AUTH_TOKEN;
+
+   // Check for Turso (libsql://) vs local (file://)
+   if (databaseUrl.startsWith("libsql://") || databaseUrl.startsWith("libsql:")) {
+     client = createClient({ url: databaseUrl, authToken });
+   } else {
+     const dbPath = databaseUrl.replace(/^file:/, "");
+     client = createClient({ url: `file:${dbPath}` });
+   }
+
+   await client.execute(`CREATE TABLE ...`);
+   ```
+
+3. **Next.js 15 Route Handlers**: Always await `params` - it's a Promise:
+   ```typescript
+   export async function POST(
+     request: NextRequest,
+     { params }: { params: Promise<{ id: string }> }
+   ) {
+     const { id } = await params;
+     // ...
+   }
+   ```
+
+4. **After creating tables**: Always verify they exist and test the API endpoints before considering the task complete.
+

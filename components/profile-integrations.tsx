@@ -13,9 +13,11 @@ export function ProfileIntegrations({ onSignOut }: ProfileIntegrationsProps) {
   const { data: session } = useSession();
   const [outlookConnected, setOutlookConnected] = useState(false);
   const [isLoadingOutlook, setIsLoadingOutlook] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(true);
 
   useEffect(() => {
     if (session?.user) {
+      setIsCheckingStatus(true);
       // Check Outlook connection status
       fetch("/api/outlook/status")
         .then((res) => res.json())
@@ -24,9 +26,13 @@ export function ProfileIntegrations({ onSignOut }: ProfileIntegrationsProps) {
         })
         .catch((error) => {
           console.error("Error fetching Outlook status:", error);
+        })
+        .finally(() => {
+          setIsCheckingStatus(false);
         });
     } else {
       setOutlookConnected(false);
+      setIsCheckingStatus(false);
     }
   }, [session]);
 
@@ -40,6 +46,16 @@ export function ProfileIntegrations({ onSignOut }: ProfileIntegrationsProps) {
 
   if (!session?.user) {
     return null;
+  }
+
+  // Don't render buttons until status is checked to avoid flash
+  if (isCheckingStatus) {
+    return (
+      <div className="flex flex-row gap-2 max-w-xs">
+        <div className="flex-1 h-8 bg-muted/50 rounded-md animate-pulse" />
+        <div className="flex-1 h-8 bg-muted/50 rounded-md animate-pulse" />
+      </div>
+    );
   }
 
   return (

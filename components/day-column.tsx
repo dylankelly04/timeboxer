@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { format, isToday, isTomorrow, isYesterday } from "date-fns"
+import { format, isToday, isTomorrow, isYesterday, startOfDay, isBefore, isSameDay } from "date-fns"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
@@ -27,8 +27,21 @@ export function DayColumn({ date, tasks, onAddTask, onEditTask }: DayColumnProps
     return format(date, "EEEE")
   }
 
-  const unscheduledTasks = tasks.filter((t) => !t.scheduledTime)
-  const totalTime = unscheduledTasks.reduce((sum, t) => sum + t.timeRequired, 0)
+  // Categorize tasks
+  // Exclude completed tasks whose due date is today or in the past (they go to archive)
+  const today = startOfDay(new Date())
+  const isArchivedTask = (task: Task) => {
+    if (!task.completed) return false
+    const dueDate = new Date(task.dueDate + "T00:00:00")
+    const dueDateStart = startOfDay(dueDate)
+    return isBefore(dueDateStart, today) || isSameDay(dueDateStart, today)
+  }
+
+  const scheduledTasks = tasks.filter((t) => t.scheduledTime && !t.completed)
+  const pendingTasks = tasks.filter((t) => !t.scheduledTime && !t.completed)
+  const completedTasks = tasks.filter((t) => t.completed && !isArchivedTask(t))
+
+  const totalTime = pendingTasks.reduce((sum, t) => sum + t.timeRequired, 0)
   const hours = Math.floor(totalTime / 60)
   const mins = totalTime % 60
 
@@ -68,7 +81,7 @@ export function DayColumn({ date, tasks, onAddTask, onEditTask }: DayColumnProps
           </div>
           <div className="text-right">
             <p className="text-xs font-medium text-muted-foreground">
-              {unscheduledTasks.length} task{unscheduledTasks.length !== 1 ? "s" : ""}
+              {scheduledTasks.length + pendingTasks.length + completedTasks.length} task{(scheduledTasks.length + pendingTasks.length + completedTasks.length) !== 1 ? "s" : ""}
             </p>
             {totalTime > 0 && (
               <p className="text-xs text-muted-foreground">
@@ -80,12 +93,44 @@ export function DayColumn({ date, tasks, onAddTask, onEditTask }: DayColumnProps
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-2">
-        {unscheduledTasks.map((task) => (
-          <TaskCard key={task.id} task={task} onEdit={onEditTask} fromDate={date} />
-        ))}
+      <div className="flex-1 overflow-y-auto p-2 space-y-3">
+        {/* Scheduled tasks */}
+        {scheduledTasks.length > 0 && (
+          <div className="space-y-2">
+            <div className="px-1 py-0.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              Scheduled ({scheduledTasks.length})
+            </div>
+            {scheduledTasks.map((task) => (
+              <TaskCard key={task.id} task={task} onEdit={onEditTask} fromDate={date} />
+            ))}
+          </div>
+        )}
 
-        {unscheduledTasks.length === 0 && (
+        {/* Pending tasks */}
+        {pendingTasks.length > 0 && (
+          <div className="space-y-2">
+            <div className="px-1 py-0.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              Pending ({pendingTasks.length})
+            </div>
+            {pendingTasks.map((task) => (
+              <TaskCard key={task.id} task={task} onEdit={onEditTask} fromDate={date} />
+            ))}
+          </div>
+        )}
+
+        {/* Completed tasks */}
+        {completedTasks.length > 0 && (
+          <div className="space-y-2">
+            <div className="px-1 py-0.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              Completed ({completedTasks.length})
+            </div>
+            {completedTasks.map((task) => (
+              <TaskCard key={task.id} task={task} onEdit={onEditTask} fromDate={date} />
+            ))}
+          </div>
+        )}
+
+        {scheduledTasks.length === 0 && pendingTasks.length === 0 && completedTasks.length === 0 && (
           <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
             <p className="text-xs">No tasks</p>
           </div>

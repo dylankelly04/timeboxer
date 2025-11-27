@@ -30,7 +30,7 @@ interface CalendarViewProps {
 }
 
 export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
-  const { tasks, scheduleTask, unscheduleTask } = useTasks()
+  const { tasks, scheduleTask, unscheduleTask, updateTask, refreshTasks } = useTasks()
   const { data: session } = useSession()
   const [calendarMode, setCalendarMode] = useState<CalendarMode>("1-day")
   const [dayOffset, setDayOffset] = useState(0)
@@ -116,19 +116,74 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
   const goToToday = () => setDayOffset(0)
 
   const getScheduledTasksForDate = (date: Date) => {
-    return tasks.filter((task) => {
-      if (!task.scheduledTime) return false
-      const taskDate = new Date(task.scheduledTime)
-      return format(taskDate, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
+    const dateStr = format(date, "yyyy-MM-dd")
+    const result: Array<{ task: Task; scheduledTime: { id: string; startTime: string; duration: number } }> = []
+
+    tasks.forEach((task) => {
+      // Check scheduledTimes array (new system)
+      if (task.scheduledTimes && task.scheduledTimes.length > 0) {
+        task.scheduledTimes.forEach((st) => {
+          const stDate = new Date(st.startTime)
+          if (format(stDate, "yyyy-MM-dd") === dateStr) {
+            result.push({ task, scheduledTime: st })
+          }
+        })
+      }
+      // Fallback to old scheduledTime field for backward compatibility
+      else if (task.scheduledTime) {
+        const taskDate = new Date(task.scheduledTime)
+        if (format(taskDate, "yyyy-MM-dd") === dateStr) {
+          result.push({
+            task,
+            scheduledTime: {
+              id: `legacy-${task.id}`,
+              startTime: task.scheduledTime,
+              duration: task.timeRequired,
+            },
+          })
+        }
+      }
     })
+
+    return result
   }
 
   const getOutlookEventsForDate = (date: Date) => {
+    const scheduledTasksForDate = getScheduledTasksForDate(date)
+
     return outlookEvents.filter((event) => {
       // Convert event time from its timezone to user's timezone for comparison
       const eventTimeZone = event.start.timeZone || userTimeZone
       const eventDate = toZonedTime(new Date(event.start.dateTime), eventTimeZone)
-      return format(eventDate, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
+      const eventEndDate = toZonedTime(new Date(event.end.dateTime), eventTimeZone)
+
+      // Check if event is on this date
+      if (format(eventDate, "yyyy-MM-dd") !== format(date, "yyyy-MM-dd")) {
+        return false
+      }
+
+      // Check if this Outlook event matches any of our scheduled tasks
+      // (to avoid showing duplicates when we sync tasks to Outlook)
+      const eventDuration = (eventEndDate.getTime() - eventDate.getTime()) / (1000 * 60) // duration in minutes
+
+      const matchesTask = scheduledTasksForDate.some(({ task, scheduledTime }) => {
+        // Compare title/subject
+        if (event.subject !== task.title) return false
+
+        // Compare start time (within 1 minute tolerance)
+        const taskStart = new Date(scheduledTime.startTime)
+        const timeDiff = Math.abs(eventDate.getTime() - taskStart.getTime())
+        if (timeDiff > 60 * 1000) return false // More than 1 minute difference
+
+        // Compare duration (within 1 minute tolerance)
+        const durationDiff = Math.abs(eventDuration - scheduledTime.duration)
+        if (durationDiff > 1) return false // More than 1 minute difference
+
+        return true
+      })
+
+      // Only include events that don't match any scheduled task
+      return !matchesTask
     })
   }
 
@@ -151,12 +206,33 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
     setDragOverSlot({ date, hour })
   }
 
-  const handleDrop = (e: React.DragEvent, date: Date, hour: number) => {
+  const handleDrop = async (e: React.DragEvent, date: Date, hour: number) => {
     e.preventDefault()
     const taskId = e.dataTransfer.getData("taskId")
+    const scheduledTimeId = e.dataTransfer.getData("scheduledTimeId") // For editing existing scheduled times
     if (taskId) {
-      const scheduledTime = setMinutes(setHours(date, hour), 0).toISOString()
-      scheduleTask(taskId, scheduledTime)
+      const task = tasks.find((t) => t.id === taskId)
+      const startTime = setMinutes(setHours(date, hour), 0).toISOString()
+
+      // Determine duration: if first time scheduling, use task's timeRequired; otherwise default to 30
+      const hasScheduledTimes = task?.scheduledTimes && task.scheduledTimes.length > 0
+      const duration = hasScheduledTimes ? 30 : (task?.timeRequired || 30)
+
+      // Add new scheduled time slot
+      try {
+        const response = await fetch(`/api/tasks/${taskId}/scheduled-times`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ startTime, duration }),
+        })
+
+        if (response.ok) {
+          // Refresh tasks to get updated scheduledTimes and timeRequired
+          await refreshTasks()
+        }
+      } catch (error) {
+        console.error("Error adding scheduled time:", error)
+      }
     }
     setDragOverSlot(null)
   }
@@ -239,21 +315,15 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
     setCreateEventEnd(null)
   }
 
-  const getTaskPosition = (task: Task) => {
-    if (!task.scheduledTime) return null
-    const taskDate = new Date(task.scheduledTime)
+  const getTaskPosition = (startTime: string, duration: number) => {
+    const taskDate = new Date(startTime)
     const hour = taskDate.getHours()
     const minutes = taskDate.getMinutes()
     const top = (hour - START_HOUR + minutes / 60) * HOUR_HEIGHT
-    const height = (task.timeRequired / 60) * HOUR_HEIGHT
+    const height = (duration / 60) * HOUR_HEIGHT
     return { top, height }
   }
 
-  const handleTaskDragStart = (e: React.DragEvent, task: Task) => {
-    e.dataTransfer.setData("taskId", task.id)
-    e.dataTransfer.setData("fromCalendar", "true")
-    e.dataTransfer.effectAllowed = "move"
-  }
 
   const now = new Date()
 
@@ -441,35 +511,44 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
                 })}
 
                 {/* Scheduled tasks */}
-                {scheduledTasks.map((task) => {
-                  const pos = getTaskPosition(task)
+                {scheduledTasks.map(({ task, scheduledTime }) => {
+                  const pos = getTaskPosition(scheduledTime.startTime, scheduledTime.duration)
                   if (!pos) return null
                   return (
                     <div
-                      key={task.id}
+                      key={`${task.id}-${scheduledTime.id}`}
                       draggable
-                      onDragStart={(e) => handleTaskDragStart(e, task)}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("taskId", task.id)
+                        e.dataTransfer.setData("scheduledTimeId", scheduledTime.id)
+                        e.dataTransfer.setData("fromCalendar", "true")
+                        e.dataTransfer.effectAllowed = "move"
+                      }}
                       className="absolute left-1 right-1 bg-primary text-primary-foreground rounded-md p-2 cursor-grab active:cursor-grabbing hover:bg-primary/90 transition-colors shadow-sm group z-10"
-                      style={{ top: pos.top + 2, height: Math.max(pos.height - 4, 24) }}
+                      style={{ top: pos.top + 2, height: Math.max(pos.height - 4, 24), zIndex: 10 }}
                     >
                       <div className="flex items-start justify-between gap-1">
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-medium truncate">{task.title}</p>
-                          {pos.height > 40 && (
-                            <p className="text-xs opacity-80 truncate">
-                              {task.timeRequired >= 60
-                                ? `${Math.floor(task.timeRequired / 60)}h${task.timeRequired % 60 > 0 ? ` ${task.timeRequired % 60}m` : ""}`
-                                : `${task.timeRequired}m`}
-                            </p>
-                          )}
                         </div>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-5 w-5 opacity-0 group-hover:opacity-100 -mr-1 -mt-1 hover:bg-primary-foreground/20 text-primary-foreground"
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation()
-                            unscheduleTask(task.id)
+                            // Delete this specific scheduled time slot
+                            try {
+                              const response = await fetch(
+                                `/api/tasks/${task.id}/scheduled-times/${scheduledTime.id}`,
+                                { method: "DELETE" }
+                              )
+                              if (response.ok) {
+                                await refreshTasks()
+                              }
+                            } catch (error) {
+                              console.error("Error deleting scheduled time:", error)
+                            }
                           }}
                         >
                           <X className="h-3 w-3" />

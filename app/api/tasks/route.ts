@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { tasks } from "@/drizzle/schema";
-import { eq, desc } from "drizzle-orm";
+import { tasks, taskScheduledTimes } from "@/drizzle/schema";
+import { eq, desc, inArray } from "drizzle-orm";
 
 // GET /api/tasks - Get all tasks for the current user
 export async function GET() {
@@ -18,6 +18,24 @@ export async function GET() {
       .where(eq(tasks.userId, session.user.id))
       .orderBy(desc(tasks.createdAt));
 
+    // Get all scheduled times for all tasks
+    const taskIds = userTasks.map((t) => t.id);
+    const allScheduledTimes = taskIds.length > 0
+      ? await db
+          .select()
+          .from(taskScheduledTimes)
+          .where(inArray(taskScheduledTimes.taskId, taskIds))
+      : [];
+
+    // Group scheduled times by taskId
+    const scheduledTimesByTask: Record<string, typeof allScheduledTimes> = {};
+    allScheduledTimes.forEach((st) => {
+      if (!scheduledTimesByTask[st.taskId]) {
+        scheduledTimesByTask[st.taskId] = [];
+      }
+      scheduledTimesByTask[st.taskId].push(st);
+    });
+
     // Convert to the Task type format
     const formattedTasks = userTasks.map((task) => ({
       id: task.id,
@@ -27,6 +45,12 @@ export async function GET() {
       dueDate: task.dueDate,
       timeRequired: task.timeRequired,
       scheduledTime: task.scheduledTime || undefined,
+      scheduledTimes: (scheduledTimesByTask[task.id] || []).map((st) => ({
+        id: st.id,
+        taskId: st.taskId,
+        startTime: st.startTime,
+        duration: st.duration,
+      })),
       completed: task.completed,
     }));
 

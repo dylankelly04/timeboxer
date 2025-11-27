@@ -113,7 +113,7 @@ export function TaskForm({ open, onOpenChange, editingTask }: TaskFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description (optional)</Label>
+            <Label htmlFor="description">Notes</Label>
             <Textarea
               id="description"
               value={description}
@@ -125,7 +125,7 @@ export function TaskForm({ open, onOpenChange, editingTask }: TaskFormProps) {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="startDate">Start Date</Label>
+              <Label htmlFor="startDate">Scheduled Time</Label>
               <Input
                 id="startDate"
                 type="date"
@@ -136,7 +136,7 @@ export function TaskForm({ open, onOpenChange, editingTask }: TaskFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="dueDate">Due Date</Label>
+              <Label htmlFor="dueDate">Deadline</Label>
               <Input
                 id="dueDate"
                 type="date"

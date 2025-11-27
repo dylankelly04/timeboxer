@@ -67,6 +67,26 @@ export const taskHistory = sqliteTable(
   })
 );
 
+export const taskScheduledTimes = sqliteTable(
+  "task_scheduled_times",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    taskId: text("taskId")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    startTime: text("startTime").notNull(), // ISO datetime string
+    duration: integer("duration").notNull(), // Duration in minutes
+    createdAt: integer("createdAt", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    taskIdIdx: index("taskIdIdx").on(table.taskId),
+  })
+);
+
 export const outlookIntegrations = sqliteTable("outlook_integrations", {
   id: text("id")
     .primaryKey()

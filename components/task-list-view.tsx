@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { format, addDays, startOfDay } from "date-fns"
+import { format, addDays, startOfDay, isBefore, isSameDay } from "date-fns"
 import { List, CalendarDays, Plus, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
@@ -31,11 +31,21 @@ export function TaskListView({ onAddTask, onEditTask }: TaskListViewProps) {
 
   const getTasksForDate = (date: Date) => {
     const dateStr = format(date, "yyyy-MM-dd")
-    return tasks.filter((task) => task.startDate === dateStr && !task.scheduledTime)
+    return tasks.filter((task) => task.startDate === dateStr)
   }
 
-  // For "all" view: all unscheduled tasks
-  const allUnscheduledTasks = tasks.filter((t) => !t.scheduledTime)
+  // For "all" view: categorize tasks
+  // Exclude completed tasks whose due date is today or in the past (they go to archive)
+  const isArchivedTask = (task: Task) => {
+    if (!task.completed) return false
+    const dueDate = new Date(task.dueDate + "T00:00:00")
+    const dueDateStart = startOfDay(dueDate)
+    return isBefore(dueDateStart, today) || isSameDay(dueDateStart, today)
+  }
+
+  const scheduledTasks = tasks.filter((t) => t.scheduledTime && !t.completed)
+  const pendingTasks = tasks.filter((t) => !t.scheduledTime && !t.completed)
+  const completedTasks = tasks.filter((t) => t.completed && !isArchivedTask(t))
 
   const goToPreviousDays = () => setDayOffset((prev) => prev - 3)
   const goToNextDays = () => setDayOffset((prev) => prev + 3)
@@ -91,7 +101,13 @@ export function TaskListView({ onAddTask, onEditTask }: TaskListViewProps) {
 
       {/* Content */}
       {viewMode === "all" ? (
-        <AllTasksView tasks={allUnscheduledTasks} onAddTask={() => onAddTask()} onEditTask={onEditTask} />
+        <AllTasksView
+          scheduledTasks={scheduledTasks}
+          pendingTasks={pendingTasks}
+          completedTasks={completedTasks}
+          onAddTask={() => onAddTask()}
+          onEditTask={onEditTask}
+        />
       ) : (
         <div className="flex-1 flex overflow-hidden">
           {days.map((date) => (
@@ -110,13 +126,15 @@ export function TaskListView({ onAddTask, onEditTask }: TaskListViewProps) {
 }
 
 interface AllTasksViewProps {
-  tasks: Task[]
+  scheduledTasks: Task[]
+  pendingTasks: Task[]
+  completedTasks: Task[]
   onAddTask: () => void
   onEditTask: (task: Task) => void
 }
 
-function AllTasksView({ tasks, onAddTask, onEditTask }: AllTasksViewProps) {
-  const { unscheduleTask, moveTaskToDate } = useTasks()
+function AllTasksView({ scheduledTasks, pendingTasks, completedTasks, onAddTask, onEditTask }: AllTasksViewProps) {
+  const { unscheduleTask } = useTasks()
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -132,29 +150,37 @@ function AllTasksView({ tasks, onAddTask, onEditTask }: AllTasksViewProps) {
     }
   }
 
-  const totalTime = tasks.reduce((sum, t) => sum + t.timeRequired, 0)
-  const hours = Math.floor(totalTime / 60)
-  const mins = totalTime % 60
+  const TaskSection = ({ title, tasks, emptyMessage }: { title: string; tasks: Task[]; emptyMessage: string }) => {
+    if (tasks.length === 0) return null
+
+    return (
+      <div className="space-y-2">
+        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          {title} ({tasks.length})
+        </div>
+        {tasks.map((task) => (
+          <TaskCard key={task.id} task={task} onEdit={onEditTask} />
+        ))}
+      </div>
+    )
+  }
+
+  const totalTasks = scheduledTasks.length + pendingTasks.length + completedTasks.length
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" onDragOver={handleDragOver} onDrop={handleDrop}>
       <div className="px-4 py-2 text-xs text-muted-foreground border-b border-border bg-card/50">
-        {tasks.length} task{tasks.length !== 1 ? "s" : ""}
-        {totalTime > 0 && (
-          <span className="ml-2">
-            ({hours > 0 && `${hours}h `}
-            {mins > 0 && `${mins}m`})
-          </span>
-        )}
+        {totalTasks} task{totalTasks !== 1 ? "s" : ""}
       </div>
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onEdit={onEditTask} />
-        ))}
-        {tasks.length === 0 && (
+      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+        <TaskSection title="Scheduled" tasks={scheduledTasks} emptyMessage="No scheduled tasks" />
+        <TaskSection title="Pending" tasks={pendingTasks} emptyMessage="No pending tasks" />
+        <TaskSection title="Completed" tasks={completedTasks} emptyMessage="No completed tasks" />
+
+        {totalTasks === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-            <p className="text-sm">No unscheduled tasks</p>
-            <p className="text-xs mt-1">Drag tasks from calendar or add new ones</p>
+            <p className="text-sm">No tasks</p>
+            <p className="text-xs mt-1">Add a new task to get started</p>
           </div>
         )}
       </div>
