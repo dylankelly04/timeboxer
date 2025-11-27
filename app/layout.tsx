@@ -1,23 +1,22 @@
-import type React from "react"
-import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
-import { Analytics } from "@vercel/analytics/next"
-import "./globals.css"
+import type React from "react";
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
+import "./globals.css";
 
-Geist({ subsets: ["latin"] })
-Geist_Mono({ subsets: ["latin"] })
+const geist = Geist({ subsets: ["latin"] });
+const geistMono = Geist_Mono({ subsets: ["latin"] });
 
 // <CHANGE> Updated metadata for task planner app
 export const metadata: Metadata = {
-  title: "Flowday - Task Planner",
-  description: "Plan your day with time-blocking and task management",
-  generator: "v0.app",
-}
+  title: "Timeboxer",
+  description: "Simple FOSS timeboxing app",
+};
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
@@ -26,5 +25,5 @@ export default function RootLayout({
         <Analytics />
       </body>
     </html>
-  )
+  );
 }

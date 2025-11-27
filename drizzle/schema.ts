@@ -2,7 +2,9 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 import { createId } from "@paralleldrive/cuid2";
 
 export const users = sqliteTable("users", {
-  id: text("id").primaryKey().$defaultFn(() => createId()),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
   email: text("email").notNull().unique(),
   name: text("name"),
   password: text("password"), // null for OAuth users
@@ -16,7 +18,9 @@ export const users = sqliteTable("users", {
 });
 
 export const tasks = sqliteTable("tasks", {
-  id: text("id").primaryKey().$defaultFn(() => createId()),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
   userId: text("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
@@ -39,7 +43,9 @@ export const tasks = sqliteTable("tasks", {
 export const taskHistory = sqliteTable(
   "task_history",
   {
-    id: text("id").primaryKey().$defaultFn(() => createId()),
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
     userId: text("userId")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -48,7 +54,9 @@ export const taskHistory = sqliteTable(
       .unique()
       .references(() => tasks.id, { onDelete: "cascade" }),
     date: text("date").notNull(), // ISO date string (YYYY-MM-DD)
-    completed: integer("completed", { mode: "boolean" }).notNull().default(false),
+    completed: integer("completed", { mode: "boolean" })
+      .notNull()
+      .default(false),
     createdAt: integer("createdAt", { mode: "timestamp" })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -59,7 +67,9 @@ export const taskHistory = sqliteTable(
 );
 
 export const outlookIntegrations = sqliteTable("outlook_integrations", {
-  id: text("id").primaryKey().$defaultFn(() => createId()),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
   userId: text("userId")
     .notNull()
     .unique()
@@ -68,7 +78,9 @@ export const outlookIntegrations = sqliteTable("outlook_integrations", {
   refreshToken: text("refreshToken").notNull(),
   expiresAt: integer("expiresAt", { mode: "timestamp" }).notNull(),
   calendarId: text("calendarId"), // Outlook calendar ID
-  syncEnabled: integer("syncEnabled", { mode: "boolean" }).notNull().default(true),
+  syncEnabled: integer("syncEnabled", { mode: "boolean" })
+    .notNull()
+    .default(true),
   lastSyncAt: integer("lastSyncAt", { mode: "timestamp" }),
   createdAt: integer("createdAt", { mode: "timestamp" })
     .notNull()
@@ -77,4 +89,3 @@ export const outlookIntegrations = sqliteTable("outlook_integrations", {
     .notNull()
     .$onUpdate(() => new Date()),
 });
-

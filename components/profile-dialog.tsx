@@ -217,7 +217,7 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
           <DialogTitle>{isSignUp ? "Create Account" : "Sign In"}</DialogTitle>
           <DialogDescription>
             {isSignUp
-              ? "Create an account to get started with Flowday"
+              ? "Create an account to get started"
               : "Sign in to your account to continue"}
           </DialogDescription>
         </DialogHeader>

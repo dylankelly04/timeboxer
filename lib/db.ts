@@ -4,7 +4,8 @@ import * as schema from "@/drizzle/schema";
 
 // Determine if we're using Turso (libsql://) or local SQLite (file://)
 const databaseUrl = process.env.DATABASE_URL || "file:./dev.db";
-const isTurso = databaseUrl.startsWith("libsql://") || databaseUrl.startsWith("libsql:");
+const isTurso =
+  databaseUrl.startsWith("libsql://") || databaseUrl.startsWith("libsql:");
 
 let client;
 if (isTurso) {
