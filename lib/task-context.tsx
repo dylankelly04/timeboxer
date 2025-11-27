@@ -100,6 +100,11 @@ export function TaskProvider({ children }: { children: ReactNode }) {
 
   const updateTask = useCallback(async (id: string, updates: Partial<Task>) => {
     try {
+      // Check if task was previously scheduled to determine if this is create or update
+      const existingTask = tasks.find((t) => t.id === id);
+      const wasScheduled = existingTask?.scheduledTime;
+      const isScheduling = updates.scheduledTime !== undefined;
+
       const response = await fetch(`/api/tasks/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -110,29 +115,68 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         setTasks((prev) =>
           prev.map((task) => (task.id === id ? updatedTask : task))
         );
+
+        // Sync to Outlook if task is scheduled
+        if (updatedTask.scheduledTime) {
+          try {
+            await fetch("/api/outlook/sync", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                taskId: id,
+                action: wasScheduled ? "update" : "create",
+              }),
+            });
+          } catch (error) {
+            // Silently fail - Outlook sync is optional
+            console.error("Failed to sync to Outlook:", error);
+          }
+        }
       }
     } catch (error) {
       console.error("Error updating task:", error);
       throw error;
     }
-  }, []);
+  }, [tasks]);
 
   const deleteTask = useCallback(async (id: string) => {
     try {
+      // Check if task is scheduled before deleting
+      const task = tasks.find((t) => t.id === id);
+      const wasScheduled = task?.scheduledTime;
+
       const response = await fetch(`/api/tasks/${id}`, {
         method: "DELETE",
       });
       if (response.ok) {
         setTasks((prev) => prev.filter((task) => task.id !== id));
+
+        // Sync deletion to Outlook if task was scheduled
+        if (wasScheduled) {
+          try {
+            await fetch("/api/outlook/sync", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                taskId: id,
+                action: "delete",
+              }),
+            });
+          } catch (error) {
+            // Silently fail - Outlook sync is optional
+            console.error("Failed to sync deletion to Outlook:", error);
+          }
+        }
       }
     } catch (error) {
       console.error("Error deleting task:", error);
       throw error;
     }
-  }, []);
+  }, [tasks]);
 
   const scheduleTask = useCallback(
     async (taskId: string, scheduledTime: string) => {
+      // updateTask already handles Outlook sync, so we don't need to sync again here
       await updateTask(taskId, { scheduledTime });
     },
     [updateTask]

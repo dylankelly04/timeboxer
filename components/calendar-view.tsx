@@ -1,12 +1,14 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { format, setHours, setMinutes, isToday, addDays, startOfDay } from "date-fns"
+import { formatInTimeZone, toZonedTime, fromZonedTime } from "date-fns-tz"
 import { X, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useTasks } from "@/lib/task-context"
+import { useSession } from "next-auth/react"
 import type { Task } from "@/lib/types"
 
 const HOUR_HEIGHT = 60
@@ -15,18 +17,92 @@ const END_HOUR = 22
 
 type CalendarMode = "1-day" | "3-day"
 
+interface OutlookEvent {
+  id: string
+  subject: string
+  start: { dateTime: string; timeZone: string }
+  end: { dateTime: string; timeZone: string }
+  body?: { content: string }
+}
+
 export function CalendarView() {
   const { tasks, scheduleTask, unscheduleTask } = useTasks()
+  const { data: session } = useSession()
   const [calendarMode, setCalendarMode] = useState<CalendarMode>("1-day")
   const [dayOffset, setDayOffset] = useState(0)
   const [dragOverSlot, setDragOverSlot] = useState<{ date: Date; hour: number } | null>(null)
+  const [outlookEvents, setOutlookEvents] = useState<OutlookEvent[]>([])
+  const [isLoadingOutlookEvents, setIsLoadingOutlookEvents] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // Get user's timezone
+  const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   const today = startOfDay(new Date())
   const startDay = addDays(today, dayOffset)
   const visibleDays = calendarMode === "1-day" ? [startDay] : [startDay, addDays(startDay, 1), addDays(startDay, 2)]
 
   const hours = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i)
+
+  // Fetch Outlook events function
+  const fetchOutlookEvents = async () => {
+    if (!session?.user) {
+      setOutlookEvents([])
+      return
+    }
+
+    setIsLoadingOutlookEvents(true)
+    try {
+      // Convert dates to user's timezone for the query
+      const startDate = startOfDay(visibleDays[0])
+      const endDate = addDays(startOfDay(visibleDays[visibleDays.length - 1]), 1) // End of last visible day
+
+      // Format dates in user's timezone for Outlook API
+      const startDateTime = formatInTimeZone(startDate, userTimeZone, "yyyy-MM-dd'T'00:00:00")
+      const endDateTime = formatInTimeZone(endDate, userTimeZone, "yyyy-MM-dd'T'00:00:00")
+
+      const response = await fetch(
+        `/api/outlook/events?startDateTime=${encodeURIComponent(startDateTime)}&endDateTime=${encodeURIComponent(endDateTime)}&timeZone=${encodeURIComponent(userTimeZone)}`
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        setOutlookEvents(data.events || [])
+      } else if (response.status === 400) {
+        // Outlook not connected - that's fine
+        setOutlookEvents([])
+      }
+    } catch (error) {
+      console.error("Error fetching Outlook events:", error)
+      setOutlookEvents([])
+    } finally {
+      setIsLoadingOutlookEvents(false)
+    }
+  }
+
+  // Get scheduled tasks hash to detect when calendar changes
+  const scheduledTasksHash = tasks
+    .filter((t) => t.scheduledTime)
+    .map((t) => `${t.id}:${t.scheduledTime}`)
+    .sort()
+    .join(",")
+
+  // Fetch Outlook events when visible days change (initial load or navigation)
+  useEffect(() => {
+    fetchOutlookEvents()
+    // Use dayOffset and calendarMode instead of visibleDays to avoid infinite loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayOffset, calendarMode, session?.user?.id])
+
+  // Refresh Outlook events when scheduled tasks change (when something is added/updated/deleted on calendar)
+  // This only triggers when scheduled tasks actually change, not on every task update
+  useEffect(() => {
+    if (session?.user && scheduledTasksHash) {
+      // Only refresh if we have scheduled tasks (to avoid unnecessary fetches on initial load)
+      fetchOutlookEvents()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduledTasksHash, session?.user?.id])
 
   const goToPreviousDays = () => setDayOffset((prev) => prev - (calendarMode === "1-day" ? 1 : 3))
   const goToNextDays = () => setDayOffset((prev) => prev + (calendarMode === "1-day" ? 1 : 3))
@@ -38,6 +114,28 @@ export function CalendarView() {
       const taskDate = new Date(task.scheduledTime)
       return format(taskDate, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
     })
+  }
+
+  const getOutlookEventsForDate = (date: Date) => {
+    return outlookEvents.filter((event) => {
+      // Convert event time from its timezone to user's timezone for comparison
+      const eventTimeZone = event.start.timeZone || userTimeZone
+      const eventDate = toZonedTime(new Date(event.start.dateTime), eventTimeZone)
+      return format(eventDate, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
+    })
+  }
+
+  const getOutlookEventPosition = (event: OutlookEvent) => {
+    // Convert event time from its timezone to user's timezone
+    const eventTimeZone = event.start.timeZone || userTimeZone
+    const startDate = toZonedTime(new Date(event.start.dateTime), eventTimeZone)
+    const endDate = toZonedTime(new Date(event.end.dateTime), eventTimeZone)
+    const hour = startDate.getHours()
+    const minutes = startDate.getMinutes()
+    const duration = (endDate.getTime() - startDate.getTime()) / (1000 * 60) // duration in minutes
+    const top = (hour - START_HOUR + minutes / 60) * HOUR_HEIGHT
+    const height = (duration / 60) * HOUR_HEIGHT
+    return { top, height }
   }
 
   const handleDragOver = (e: React.DragEvent, date: Date, hour: number) => {
@@ -195,6 +293,35 @@ export function CalendarView() {
                     <div className="flex-1 h-0.5 bg-destructive" />
                   </div>
                 )}
+
+                {/* Outlook events */}
+                {getOutlookEventsForDate(date).map((event) => {
+                  const pos = getOutlookEventPosition(event)
+                  if (!pos) return null
+
+                  // Convert event times to user's timezone for display
+                  const eventTimeZone = event.start.timeZone || userTimeZone
+                  const startDate = toZonedTime(new Date(event.start.dateTime), eventTimeZone)
+                  const endDate = toZonedTime(new Date(event.end.dateTime), eventTimeZone)
+
+                  return (
+                    <div
+                      key={event.id}
+                      className="absolute left-1 right-1 rounded px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-900 dark:text-blue-100 overflow-hidden"
+                      style={{
+                        top: pos.top,
+                        height: Math.max(pos.height, 20),
+                        zIndex: 5,
+                      }}
+                      title={`${event.subject}\n${format(startDate, "h:mm a")} - ${format(endDate, "h:mm a")}`}
+                    >
+                      <div className="font-medium truncate">{event.subject}</div>
+                      <div className="text-[10px] opacity-75">
+                        {format(startDate, "h:mm a")} - {format(endDate, "h:mm a")}
+                      </div>
+                    </div>
+                  )
+                })}
 
                 {/* Scheduled tasks */}
                 {scheduledTasks.map((task) => {

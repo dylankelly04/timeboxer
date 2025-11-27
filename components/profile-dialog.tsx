@@ -38,6 +38,8 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
     Array<{ date: string; completed: boolean }>
   >([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [outlookConnected, setOutlookConnected] = useState(false);
+  const [isLoadingOutlook, setIsLoadingOutlook] = useState(false);
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,6 +99,9 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
         .then((data) => {
           if (Array.isArray(data)) {
             setTaskHistory(data);
+          } else {
+            console.error("API returned non-array for task history:", data);
+            setTaskHistory([]);
           }
         })
         .catch((err) => {
@@ -105,8 +110,19 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
         .finally(() => {
           setIsLoadingHistory(false);
         });
+
+      // Check Outlook connection status
+      fetch("/api/outlook/status")
+        .then((res) => res.json())
+        .then((data) => {
+          setOutlookConnected(data.connected || false);
+        })
+        .catch((error) => {
+          console.error("Error fetching Outlook status:", error);
+        });
     } else {
       setTaskHistory([]);
+      setOutlookConnected(false);
     }
   }, [open, session]);
 
@@ -167,21 +183,49 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
                   variant="outline"
                   size="sm"
                   className="w-full gap-2 justify-start"
-                  onClick={() => {
-                    // TODO: Implement Outlook OAuth flow
-                    window.open(
-                      `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${
-                        process.env.NEXT_PUBLIC_OUTLOOK_CLIENT_ID ||
-                        "YOUR_CLIENT_ID"
-                      }&response_type=code&redirect_uri=${encodeURIComponent(
-                        window.location.origin + "/api/auth/outlook/callback"
-                      )}&scope=Calendars.ReadWrite offline_access&response_mode=query`,
-                      "_blank"
-                    );
+                  onClick={async () => {
+                    if (outlookConnected) {
+                      // Disconnect
+                      setIsLoadingOutlook(true);
+                      try {
+                        const response = await fetch("/api/outlook/disconnect", {
+                          method: "POST",
+                        });
+                        if (response.ok) {
+                          setOutlookConnected(false);
+                        }
+                      } catch (error) {
+                        console.error("Error disconnecting Outlook:", error);
+                      } finally {
+                        setIsLoadingOutlook(false);
+                      }
+                    } else {
+                      // Connect
+                      setIsLoadingOutlook(true);
+                      try {
+                        const response = await fetch("/api/auth/outlook");
+                        const data = await response.json();
+                        if (data.authUrl) {
+                          window.location.href = data.authUrl;
+                        } else {
+                          setError("Failed to initiate Outlook connection");
+                          setIsLoadingOutlook(false);
+                        }
+                      } catch (error) {
+                        console.error("Error connecting Outlook:", error);
+                        setError("Failed to connect Outlook");
+                        setIsLoadingOutlook(false);
+                      }
+                    }
                   }}
+                  disabled={isLoadingOutlook}
                 >
-                  <CalendarIcon className="h-3.5 w-3.5" />
-                  Connect Outlook Calendar
+                  {isLoadingOutlook ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CalendarIcon className="h-3.5 w-3.5" />
+                  )}
+                  {outlookConnected ? "Disconnect Outlook" : "Connect Outlook Calendar"}
                 </Button>
                 <Button
                   variant="outline"

@@ -78,6 +78,8 @@ export const outlookIntegrations = sqliteTable("outlook_integrations", {
   refreshToken: text("refreshToken").notNull(),
   expiresAt: integer("expiresAt", { mode: "timestamp" }).notNull(),
   calendarId: text("calendarId"), // Outlook calendar ID
+  subscriptionId: text("subscriptionId"), // Webhook subscription ID
+  subscriptionExpiresAt: integer("subscriptionExpiresAt", { mode: "timestamp" }), // When subscription expires
   syncEnabled: integer("syncEnabled", { mode: "boolean" })
     .notNull()
     .default(true),
