@@ -1,8 +1,68 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { tasks, taskScheduledTimes } from "@/drizzle/schema";
+import { tasks, taskScheduledTimes, outlookIntegrations } from "@/drizzle/schema";
 import { eq, and } from "drizzle-orm";
+import { getValidAccessToken, createCalendarEvent } from "@/lib/outlook";
+
+// Helper function to sync scheduled time to Outlook
+async function syncScheduledTimeToOutlook(
+  userId: string,
+  taskId: string,
+  scheduledTimeId: string,
+  action: "create" | "update" | "delete",
+  task: { title: string; description: string | null },
+  scheduledTime: { startTime: string; duration: number }
+) {
+  try {
+    // Get Outlook integration
+    const [integration] = await db
+      .select()
+      .from(outlookIntegrations)
+      .where(eq(outlookIntegrations.userId, userId))
+      .limit(1);
+
+    if (!integration || !integration.syncEnabled || !integration.calendarId) {
+      return; // Outlook not connected or sync disabled
+    }
+
+    const accessToken = await getValidAccessToken(userId);
+    if (!accessToken) {
+      return;
+    }
+
+    if (action === "delete") {
+      // Can't easily delete without storing event ID
+      return;
+    }
+
+    const startTime = new Date(scheduledTime.startTime);
+    const endTime = new Date(startTime.getTime() + scheduledTime.duration * 60 * 1000);
+
+    const event = {
+      subject: task.title,
+      start: {
+        dateTime: startTime.toISOString(),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
+      end: {
+        dateTime: endTime.toISOString(),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
+      body: task.description
+        ? {
+            contentType: "text",
+            content: task.description,
+          }
+        : undefined,
+    };
+
+    await createCalendarEvent(accessToken, integration.calendarId, event);
+  } catch (error) {
+    // Silently fail - Outlook sync is optional
+    throw error;
+  }
+}
 
 // POST /api/tasks/[id]/scheduled-times - Add a new scheduled time slot
 export async function POST(
@@ -42,6 +102,14 @@ export async function POST(
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
+    // Check if this is the first scheduled time slot (before creating the new one)
+    const existingScheduledTimes = await db
+      .select()
+      .from(taskScheduledTimes)
+      .where(eq(taskScheduledTimes.taskId, taskId));
+
+    const isFirstScheduledTime = existingScheduledTimes.length === 0;
+
     // Create new scheduled time slot
     const [scheduledTime] = await db
       .insert(taskScheduledTimes)
@@ -52,21 +120,34 @@ export async function POST(
       })
       .returning();
 
-    // Update task's timeRequired to sum of all scheduled durations
-    const allScheduledTimes = await db
-      .select()
-      .from(taskScheduledTimes)
-      .where(eq(taskScheduledTimes.taskId, taskId));
+    // Update task's timeRequired:
+    // - If first scheduled time, keep the original timeRequired (don't change it)
+    // - If additional scheduled times, sum all scheduled durations (including the new one)
+    if (!isFirstScheduledTime) {
+      const allScheduledTimes = await db
+        .select()
+        .from(taskScheduledTimes)
+        .where(eq(taskScheduledTimes.taskId, taskId));
 
-    const totalScheduledDuration = allScheduledTimes.reduce(
-      (sum, st) => sum + st.duration,
-      0
+      const totalScheduledDuration = allScheduledTimes.reduce(
+        (sum, st) => sum + st.duration,
+        0
+      );
+
+      await db
+        .update(tasks)
+        .set({ timeRequired: totalScheduledDuration })
+        .where(eq(tasks.id, taskId));
+    }
+    // If first scheduled time, timeRequired stays as the original allocated time (no update needed)
+
+    // Sync to Outlook (fire and forget)
+    syncScheduledTimeToOutlook(session.user.id, taskId, scheduledTime.id, "create", task, scheduledTime).catch(
+      (error) => {
+        // Silently fail - Outlook sync is optional
+        console.error("Failed to sync scheduled time to Outlook:", error);
+      }
     );
-
-    await db
-      .update(tasks)
-      .set({ timeRequired: totalScheduledDuration })
-      .where(eq(tasks.id, taskId));
 
     return NextResponse.json(scheduledTime, { status: 201 });
   } catch (error) {

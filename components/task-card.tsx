@@ -66,6 +66,10 @@ export function TaskCard({
       return;
     }
     e.dataTransfer.setData("taskId", task.id);
+    // Store task duration for accurate drag-over highlight
+    const hasScheduledTimes = task.scheduledTimes && task.scheduledTimes.length > 0;
+    const duration = hasScheduledTimes ? 30 : (task.timeRequired || 30);
+    e.dataTransfer.setData("taskDuration", duration.toString());
     if (fromDate) {
       e.dataTransfer.setData("fromDay", fromDate.toISOString());
     }

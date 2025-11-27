@@ -34,12 +34,13 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
   const { data: session } = useSession()
   const [calendarMode, setCalendarMode] = useState<CalendarMode>("1-day")
   const [dayOffset, setDayOffset] = useState(0)
-  const [dragOverSlot, setDragOverSlot] = useState<{ date: Date; hour: number } | null>(null)
+  const [dragOverSlot, setDragOverSlot] = useState<{ date: Date; hour: number; minutes: number; duration: number; top: number } | null>(null)
   const [outlookEvents, setOutlookEvents] = useState<OutlookEvent[]>([])
   const [isLoadingOutlookEvents, setIsLoadingOutlookEvents] = useState(false)
   const [isCreatingEvent, setIsCreatingEvent] = useState(false)
   const [createEventStart, setCreateEventStart] = useState<{ date: Date; hour: number; minutes: number; top: number } | null>(null)
   const [createEventEnd, setCreateEventEnd] = useState<{ date: Date; hour: number; minutes: number; top: number } | null>(null)
+  const [resizingTask, setResizingTask] = useState<{ taskId: string; scheduledTimeId: string; startTime: string; duration: number; resizeEdge: "top" | "bottom"; initialY: number; scheduledDate: Date } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Get user's timezone
@@ -131,7 +132,7 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
       }
       // Fallback to old scheduledTime field for backward compatibility
       else if (task.scheduledTime) {
-        const taskDate = new Date(task.scheduledTime)
+      const taskDate = new Date(task.scheduledTime)
         if (format(taskDate, "yyyy-MM-dd") === dateStr) {
           result.push({
             task,
@@ -203,7 +204,27 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
   const handleDragOver = (e: React.DragEvent, date: Date, hour: number) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = "move"
-    setDragOverSlot({ date, hour })
+
+    // Get the task duration from drag data (set during dragStart)
+    const taskDurationStr = e.dataTransfer.getData("taskDuration")
+    const taskDuration = taskDurationStr ? parseInt(taskDurationStr, 10) : 30
+
+    // Calculate exact drop position to show accurate highlight
+    const hourSlot = e.currentTarget as HTMLElement
+    const offsetY = e.nativeEvent.offsetY
+    const slotTop = (hour - START_HOUR) * HOUR_HEIGHT
+    const totalY = slotTop + offsetY
+
+    // Convert Y position to exact hour (with decimals)
+    const exactHour = Math.max(START_HOUR, Math.min(END_HOUR, (totalY / HOUR_HEIGHT) + START_HOUR))
+    const hourFloor = Math.floor(exactHour)
+    // Round to nearest 30 minutes (0 or 30)
+    const minutes = Math.round((exactHour - hourFloor) * 60 / 30) * 30
+
+    // Calculate the top position for the highlight
+    const highlightTop = (hourFloor - START_HOUR + minutes / 60) * HOUR_HEIGHT
+
+    setDragOverSlot({ date, hour: hourFloor, minutes, duration: taskDuration, top: highlightTop })
   }
 
   const handleDrop = async (e: React.DragEvent, date: Date, hour: number) => {
@@ -212,26 +233,68 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
     const scheduledTimeId = e.dataTransfer.getData("scheduledTimeId") // For editing existing scheduled times
     if (taskId) {
       const task = tasks.find((t) => t.id === taskId)
-      const startTime = setMinutes(setHours(date, hour), 0).toISOString()
 
-      // Determine duration: if first time scheduling, use task's timeRequired; otherwise default to 30
-      const hasScheduledTimes = task?.scheduledTimes && task.scheduledTimes.length > 0
-      const duration = hasScheduledTimes ? 30 : (task?.timeRequired || 30)
+      // Calculate exact drop position to support half-hour increments
+      // The drop happens on the hour slot div, which is absolutely positioned
+      const hourSlot = e.currentTarget as HTMLElement
 
-      // Add new scheduled time slot
-      try {
-        const response = await fetch(`/api/tasks/${taskId}/scheduled-times`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ startTime, duration }),
-        })
+      // Get the position within the hour slot (0 to HOUR_HEIGHT)
+      const offsetY = e.nativeEvent.offsetY
 
-        if (response.ok) {
-          // Refresh tasks to get updated scheduledTimes and timeRequired
-          await refreshTasks()
+      // Calculate the total Y position: hour slot's top position + offset within slot
+      const slotTop = (hour - START_HOUR) * HOUR_HEIGHT
+      const totalY = slotTop + offsetY
+
+      // Convert Y position to exact hour (with decimals)
+      const exactHour = Math.max(START_HOUR, Math.min(END_HOUR, (totalY / HOUR_HEIGHT) + START_HOUR))
+      const hourFloor = Math.floor(exactHour)
+      // Round to nearest 30 minutes (0 or 30)
+      const minutes = Math.round((exactHour - hourFloor) * 60 / 30) * 30
+
+      const startTime = setMinutes(setHours(date, hourFloor), minutes).toISOString()
+
+      if (scheduledTimeId && scheduledTimeId !== "undefined") {
+        // Update existing scheduled time slot (moving it)
+        const scheduledTime = task?.scheduledTimes?.find((st) => st.id === scheduledTimeId)
+        if (scheduledTime) {
+          try {
+            const response = await fetch(
+              `/api/tasks/${taskId}/scheduled-times/${scheduledTimeId}`,
+              {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  startTime,
+                  duration: scheduledTime.duration, // Keep same duration when moving
+                }),
+              }
+            )
+
+            if (response.ok) {
+              await refreshTasks()
+            }
+          } catch (error) {
+            console.error("Error updating scheduled time:", error)
+          }
         }
-      } catch (error) {
-        console.error("Error adding scheduled time:", error)
+      } else {
+        // Create new scheduled time slot
+        const hasScheduledTimes = task?.scheduledTimes && task.scheduledTimes.length > 0
+        const duration = hasScheduledTimes ? 30 : (task?.timeRequired || 30)
+
+        try {
+          const response = await fetch(`/api/tasks/${taskId}/scheduled-times`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ startTime, duration }),
+          })
+
+          if (response.ok) {
+            await refreshTasks()
+          }
+        } catch (error) {
+          console.error("Error adding scheduled time:", error)
+        }
       }
     }
     setDragOverSlot(null)
@@ -270,6 +333,60 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
   }
 
   const handleMouseMove = (e: React.MouseEvent, date: Date) => {
+    // Handle resize
+    if (resizingTask) {
+      const dayColumn = e.currentTarget as HTMLElement
+      const rect = dayColumn.getBoundingClientRect()
+      const y = e.clientY - rect.top
+
+      // Use the scheduled date (the date the task is on)
+      const scheduledDate = resizingTask.scheduledDate
+
+      // Calculate the exact hour and minutes from the mouse position
+      const exactHour = Math.max(START_HOUR, Math.min(END_HOUR, (y / HOUR_HEIGHT) + START_HOUR))
+      const hourFloor = Math.floor(exactHour)
+      // Round to nearest 30 minutes
+      const minutes = Math.round((exactHour - hourFloor) * 60 / 30) * 30
+      const newTime = setMinutes(setHours(scheduledDate, hourFloor), minutes)
+
+      if (resizingTask.resizeEdge === "top") {
+        // Resizing from top - calculate new start time from mouse position
+        const originalStart = new Date(resizingTask.startTime)
+        const originalEnd = new Date(originalStart.getTime() + resizingTask.duration * 60 * 1000)
+
+        // New start time is the mouse position (rounded to 30 minutes)
+        const newStartTime = newTime
+        // New duration is the difference between new start and original end
+        const newDuration = Math.max(30, Math.round((originalEnd.getTime() - newStartTime.getTime()) / (1000 * 60) / 30) * 30)
+
+        // Ensure start time doesn't go past end time
+        if (newStartTime < originalEnd && newDuration >= 30) {
+          setResizingTask({
+            ...resizingTask,
+            startTime: newStartTime.toISOString(),
+            duration: newDuration,
+          })
+        }
+      } else {
+        // Resizing from bottom - calculate new end time from mouse position
+        const originalStart = new Date(resizingTask.startTime)
+        const newEndTime = newTime
+
+        // New duration is the difference between original start and new end
+        const newDuration = Math.max(30, Math.round((newEndTime.getTime() - originalStart.getTime()) / (1000 * 60) / 30) * 30)
+
+        // Ensure end time is after start time
+        if (newEndTime > originalStart && newDuration >= 30) {
+          setResizingTask({
+            ...resizingTask,
+            duration: newDuration,
+          })
+        }
+      }
+      return
+    }
+
+    // Handle event creation
     if (!isCreatingEvent || !createEventStart) return
 
     // Get the exact position within the day column (the currentTarget is the day column div)
@@ -286,7 +403,30 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
     setCreateEventEnd({ date, hour: hourFloor, minutes, top })
   }
 
-  const handleMouseUp = () => {
+  const handleMouseUp = async () => {
+    // Handle resize end
+    if (resizingTask) {
+      const { taskId, scheduledTimeId, startTime, duration } = resizingTask
+      try {
+        const response = await fetch(
+          `/api/tasks/${taskId}/scheduled-times/${scheduledTimeId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ startTime, duration }),
+          }
+        )
+        if (response.ok) {
+          await refreshTasks()
+        }
+      } catch (error) {
+        console.error("Error updating scheduled time:", error)
+      }
+      setResizingTask(null)
+      return
+    }
+
+    // Handle event creation
     if (!isCreatingEvent || !createEventStart || !createEventEnd) {
       setIsCreatingEvent(false)
       setCreateEventStart(null)
@@ -422,24 +562,23 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
                 key={date.toISOString()}
                 className={cn("flex-1 relative", dayIndex > 0 && "border-l border-border")}
                 onMouseMove={(e) => {
-                  if (isCreatingEvent) {
+                  if (isCreatingEvent || resizingTask) {
                     handleMouseMove(e, date)
                   }
                 }}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
+                onMouseUp={(e) => handleMouseUp(e)}
+                onMouseLeave={(e) => {
+                  if (resizingTask) {
+                    handleMouseUp(e)
+                  }
+                }}
               >
                 {/* Hour grid lines */}
                 {hours.map((hour) => {
-                  const isOver = dragOverSlot?.date.getTime() === date.getTime() && dragOverSlot?.hour === hour
-
                   return (
                     <div
                       key={hour}
-                      className={cn(
-                        "absolute left-0 right-0 border-t border-border hour-slot cursor-pointer",
-                        isOver && "bg-primary/10"
-                      )}
+                      className="absolute left-0 right-0 border-t border-border hour-slot cursor-pointer"
                       style={{ top: (hour - START_HOUR) * HOUR_HEIGHT, height: HOUR_HEIGHT }}
                       onDragOver={(e) => handleDragOver(e, date, hour)}
                       onDrop={(e) => handleDrop(e, date, hour)}
@@ -453,6 +592,23 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
                     />
                   )
                 })}
+
+                {/* Drag-over highlight showing exact task size */}
+                {dragOverSlot && dragOverSlot.date.getTime() === date.getTime() && (
+                  <div
+                    className="absolute left-1 right-1 rounded bg-primary/20 border-2 border-primary border-dashed pointer-events-none z-30"
+                    style={{
+                      top: dragOverSlot.top,
+                      height: (dragOverSlot.duration / 60) * HOUR_HEIGHT,
+                    }}
+                  >
+                    <div className="p-1 text-xs text-primary font-medium">
+                      {dragOverSlot.duration < 60
+                        ? `${dragOverSlot.duration}m`
+                        : `${Math.floor(dragOverSlot.duration / 60)}h ${dragOverSlot.duration % 60}m`}
+                    </div>
+                  </div>
+                )}
 
                 {/* Visual indicator for creating event */}
                 {isCreatingEvent && createEventStart && createEventEnd &&
@@ -512,13 +668,24 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
 
                 {/* Scheduled tasks */}
                 {scheduledTasks.map(({ task, scheduledTime }) => {
-                  const pos = getTaskPosition(scheduledTime.startTime, scheduledTime.duration)
+                  // Use resizing state if this task is being resized
+                  const isResizing = resizingTask?.scheduledTimeId === scheduledTime.id
+                  const displayStartTime = isResizing ? resizingTask.startTime : scheduledTime.startTime
+                  const displayDuration = isResizing ? resizingTask.duration : scheduledTime.duration
+                  const pos = getTaskPosition(displayStartTime, displayDuration)
                   if (!pos) return null
+
                   return (
                     <div
                       key={`${task.id}-${scheduledTime.id}`}
-                      draggable
+                      draggable={!isResizing}
                       onDragStart={(e) => {
+                        // Don't start drag if clicking on resize handle
+                        const target = e.target as HTMLElement
+                        if (target.classList.contains("resize-handle")) {
+                          e.preventDefault()
+                          return
+                        }
                         e.dataTransfer.setData("taskId", task.id)
                         e.dataTransfer.setData("scheduledTimeId", scheduledTime.id)
                         e.dataTransfer.setData("fromCalendar", "true")
@@ -527,6 +694,25 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
                       className="absolute left-1 right-1 bg-primary text-primary-foreground rounded-md p-2 cursor-grab active:cursor-grabbing hover:bg-primary/90 transition-colors shadow-sm group z-10"
                       style={{ top: pos.top + 2, height: Math.max(pos.height - 4, 24), zIndex: 10 }}
                     >
+                      {/* Top resize handle */}
+                      <div
+                        className="absolute left-0 right-0 top-0 h-2 cursor-ns-resize resize-handle z-20"
+                        onMouseDown={(e) => {
+                          e.stopPropagation()
+                          e.preventDefault()
+                          const scheduledDate = new Date(scheduledTime.startTime)
+                          setResizingTask({
+                            taskId: task.id,
+                            scheduledTimeId: scheduledTime.id,
+                            startTime: scheduledTime.startTime,
+                            duration: scheduledTime.duration,
+                            resizeEdge: "top",
+                            initialY: 0, // Not used anymore, but kept for type compatibility
+                            scheduledDate: scheduledDate,
+                          })
+                        }}
+                      />
+
                       <div className="flex items-start justify-between gap-1">
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-medium truncate">{task.title}</p>
@@ -554,6 +740,25 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
                           <X className="h-3 w-3" />
                         </Button>
                       </div>
+
+                      {/* Bottom resize handle */}
+                      <div
+                        className="absolute left-0 right-0 bottom-0 h-2 cursor-ns-resize resize-handle z-20"
+                        onMouseDown={(e) => {
+                          e.stopPropagation()
+                          e.preventDefault()
+                          const scheduledDate = new Date(scheduledTime.startTime)
+                          setResizingTask({
+                            taskId: task.id,
+                            scheduledTimeId: scheduledTime.id,
+                            startTime: scheduledTime.startTime,
+                            duration: scheduledTime.duration,
+                            resizeEdge: "bottom",
+                            initialY: 0, // Not used anymore, but kept for type compatibility
+                            scheduledDate: scheduledDate,
+                          })
+                        }}
+                      />
                     </div>
                   )
                 })}
