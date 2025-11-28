@@ -10,7 +10,7 @@ import {
   addDays,
   startOfDay,
 } from "date-fns";
-import { formatInTimeZone, toZonedTime, fromZonedTime } from "date-fns-tz";
+import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 import { X, ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {

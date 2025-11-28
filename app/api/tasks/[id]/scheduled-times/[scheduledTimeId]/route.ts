@@ -62,17 +62,8 @@ async function syncScheduledTimeToOutlook(
             "Failed to delete Outlook event:",
             scheduledTime.outlookEventId
           );
-        } else {
-          console.log(
-            "Successfully deleted Outlook event:",
-            scheduledTime.outlookEventId
-          );
         }
-      } else {
-        console.log(
-          "No Outlook event ID to delete for scheduled time:",
-          scheduledTimeId
-        );
+      }
       }
       return;
     }
@@ -336,11 +327,6 @@ export async function DELETE(
           error
         );
       });
-    } else {
-      console.log(
-        "Skipping Outlook sync - no event ID stored for scheduled time:",
-        scheduledTimeId
-      );
     }
 
     return NextResponse.json({ success: true });

@@ -36,11 +36,6 @@ async function syncScheduledTimeToOutlook(
       .limit(1);
 
     if (!integration || !integration.syncEnabled || !integration.calendarId) {
-      console.log("Outlook sync skipped - integration not found or disabled:", {
-        hasIntegration: !!integration,
-        syncEnabled: integration?.syncEnabled,
-        hasCalendarId: !!integration?.calendarId,
-      });
       return; // Outlook not connected or sync disabled
     }
 
@@ -95,26 +90,17 @@ async function syncScheduledTimeToOutlook(
       );
     } else {
       // Create new event and store the event ID
-      console.log(
-        "Creating Outlook event for scheduled time:",
-        scheduledTimeId
-      );
       const eventId = await createCalendarEvent(
         accessToken,
         integration.calendarId,
         event
       );
       if (eventId) {
-        console.log("Outlook event created successfully:", eventId);
         // Update the scheduled time with the Outlook event ID
         await db
           .update(taskScheduledTimes)
           .set({ outlookEventId: eventId })
           .where(eq(taskScheduledTimes.id, scheduledTimeId));
-        console.log(
-          "Stored Outlook event ID in scheduled time:",
-          scheduledTimeId
-        );
       } else {
         console.error(
           "Failed to create Outlook event - createCalendarEvent returned null"
@@ -229,10 +215,7 @@ export async function POST(
       }
     )
       .then(() => {
-        console.log(
-          "Successfully synced scheduled time to Outlook:",
-          scheduledTime.id
-        );
+        // Successfully synced to Outlook
       })
       .catch((error) => {
         // Log error but don't fail the request
