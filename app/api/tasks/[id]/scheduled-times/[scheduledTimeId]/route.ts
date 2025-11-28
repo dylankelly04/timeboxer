@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { tasks, taskScheduledTimes, outlookIntegrations } from "@/drizzle/schema";
+import {
+  tasks,
+  taskScheduledTimes,
+  outlookIntegrations,
+} from "@/drizzle/schema";
 import { eq, and } from "drizzle-orm";
-import { getValidAccessToken, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent } from "@/lib/outlook";
+import {
+  getValidAccessToken,
+  createCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
+} from "@/lib/outlook";
 
 // Helper function to sync scheduled time to Outlook
 async function syncScheduledTimeToOutlook(
@@ -12,7 +21,11 @@ async function syncScheduledTimeToOutlook(
   scheduledTimeId: string,
   action: "create" | "update" | "delete",
   task: { title: string; description: string | null },
-  scheduledTime: { startTime: string; duration: number; outlookEventId?: string | null }
+  scheduledTime: {
+    startTime: string;
+    duration: number;
+    outlookEventId?: string | null;
+  }
 ) {
   try {
     // Get Outlook integration
@@ -32,19 +45,34 @@ async function syncScheduledTimeToOutlook(
     }
 
     const startTime = new Date(scheduledTime.startTime);
-    const endTime = new Date(startTime.getTime() + scheduledTime.duration * 60 * 1000);
+    const endTime = new Date(
+      startTime.getTime() + scheduledTime.duration * 60 * 1000
+    );
 
     if (action === "delete") {
       // Delete the Outlook event if we have the event ID
       if (scheduledTime.outlookEventId) {
-        const deleted = await deleteCalendarEvent(accessToken, integration.calendarId, scheduledTime.outlookEventId);
+        const deleted = await deleteCalendarEvent(
+          accessToken,
+          integration.calendarId,
+          scheduledTime.outlookEventId
+        );
         if (!deleted) {
-          console.error("Failed to delete Outlook event:", scheduledTime.outlookEventId);
+          console.error(
+            "Failed to delete Outlook event:",
+            scheduledTime.outlookEventId
+          );
         } else {
-          console.log("Successfully deleted Outlook event:", scheduledTime.outlookEventId);
+          console.log(
+            "Successfully deleted Outlook event:",
+            scheduledTime.outlookEventId
+          );
         }
       } else {
-        console.log("No Outlook event ID to delete for scheduled time:", scheduledTimeId);
+        console.log(
+          "No Outlook event ID to delete for scheduled time:",
+          scheduledTimeId
+        );
       }
       return;
     }
@@ -69,10 +97,19 @@ async function syncScheduledTimeToOutlook(
 
     if (action === "update" && scheduledTime.outlookEventId) {
       // Update existing event
-      await updateCalendarEvent(accessToken, integration.calendarId, scheduledTime.outlookEventId, event);
+      await updateCalendarEvent(
+        accessToken,
+        integration.calendarId,
+        scheduledTime.outlookEventId,
+        event
+      );
     } else {
       // Create new event and store the event ID
-      const eventId = await createCalendarEvent(accessToken, integration.calendarId, event);
+      const eventId = await createCalendarEvent(
+        accessToken,
+        integration.calendarId,
+        event
+      );
       if (eventId) {
         // Update the scheduled time with the Outlook event ID
         await db
@@ -133,7 +170,10 @@ export async function PUT(
       .limit(1);
 
     if (!oldScheduledTime) {
-      return NextResponse.json({ error: "Scheduled time not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Scheduled time not found" },
+        { status: 404 }
+      );
     }
 
     // Update the scheduled time slot
@@ -238,7 +278,10 @@ export async function DELETE(
       .limit(1);
 
     if (!scheduledTimeToDelete) {
-      return NextResponse.json({ error: "Scheduled time not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Scheduled time not found" },
+        { status: 404 }
+      );
     }
 
     // Delete the scheduled time slot
@@ -288,10 +331,16 @@ export async function DELETE(
         }
       ).catch((error) => {
         // Log error but don't fail the deletion
-        console.error("Failed to sync scheduled time deletion to Outlook:", error);
+        console.error(
+          "Failed to sync scheduled time deletion to Outlook:",
+          error
+        );
       });
     } else {
-      console.log("Skipping Outlook sync - no event ID stored for scheduled time:", scheduledTimeId);
+      console.log(
+        "Skipping Outlook sync - no event ID stored for scheduled time:",
+        scheduledTimeId
+      );
     }
 
     return NextResponse.json({ success: true });

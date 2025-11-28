@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { tasks, taskScheduledTimes, outlookIntegrations } from "@/drizzle/schema";
+import {
+  tasks,
+  taskScheduledTimes,
+  outlookIntegrations,
+} from "@/drizzle/schema";
 import { eq, and } from "drizzle-orm";
-import { getValidAccessToken, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent } from "@/lib/outlook";
+import {
+  getValidAccessToken,
+  createCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
+} from "@/lib/outlook";
 
 // Helper function to sync scheduled time to Outlook
 async function syncScheduledTimeToOutlook(
@@ -12,7 +21,11 @@ async function syncScheduledTimeToOutlook(
   scheduledTimeId: string,
   action: "create" | "update" | "delete",
   task: { title: string; description: string | null },
-  scheduledTime: { startTime: string; duration: number; outlookEventId?: string | null }
+  scheduledTime: {
+    startTime: string;
+    duration: number;
+    outlookEventId?: string | null;
+  }
 ) {
   try {
     // Get Outlook integration
@@ -38,12 +51,18 @@ async function syncScheduledTimeToOutlook(
     }
 
     const startTime = new Date(scheduledTime.startTime);
-    const endTime = new Date(startTime.getTime() + scheduledTime.duration * 60 * 1000);
+    const endTime = new Date(
+      startTime.getTime() + scheduledTime.duration * 60 * 1000
+    );
 
     if (action === "delete") {
       // Delete the Outlook event if we have the event ID
       if (scheduledTime.outlookEventId) {
-        await deleteCalendarEvent(accessToken, integration.calendarId, scheduledTime.outlookEventId);
+        await deleteCalendarEvent(
+          accessToken,
+          integration.calendarId,
+          scheduledTime.outlookEventId
+        );
       }
       return;
     }
@@ -68,11 +87,23 @@ async function syncScheduledTimeToOutlook(
 
     if (action === "update" && scheduledTime.outlookEventId) {
       // Update existing event
-      await updateCalendarEvent(accessToken, integration.calendarId, scheduledTime.outlookEventId, event);
+      await updateCalendarEvent(
+        accessToken,
+        integration.calendarId,
+        scheduledTime.outlookEventId,
+        event
+      );
     } else {
       // Create new event and store the event ID
-      console.log("Creating Outlook event for scheduled time:", scheduledTimeId);
-      const eventId = await createCalendarEvent(accessToken, integration.calendarId, event);
+      console.log(
+        "Creating Outlook event for scheduled time:",
+        scheduledTimeId
+      );
+      const eventId = await createCalendarEvent(
+        accessToken,
+        integration.calendarId,
+        event
+      );
       if (eventId) {
         console.log("Outlook event created successfully:", eventId);
         // Update the scheduled time with the Outlook event ID
@@ -80,16 +111,27 @@ async function syncScheduledTimeToOutlook(
           .update(taskScheduledTimes)
           .set({ outlookEventId: eventId })
           .where(eq(taskScheduledTimes.id, scheduledTimeId));
-        console.log("Stored Outlook event ID in scheduled time:", scheduledTimeId);
+        console.log(
+          "Stored Outlook event ID in scheduled time:",
+          scheduledTimeId
+        );
       } else {
-        console.error("Failed to create Outlook event - createCalendarEvent returned null");
+        console.error(
+          "Failed to create Outlook event - createCalendarEvent returned null"
+        );
       }
     }
   } catch (error) {
     // Log error details for debugging
     console.error("Error syncing to Outlook:", error);
-    console.error("Error details:", error instanceof Error ? error.message : String(error));
-    console.error("Stack trace:", error instanceof Error ? error.stack : "No stack trace");
+    console.error(
+      "Error details:",
+      error instanceof Error ? error.message : String(error)
+    );
+    console.error(
+      "Stack trace:",
+      error instanceof Error ? error.stack : "No stack trace"
+    );
     throw error; // Re-throw to be caught by caller
   }
 }
@@ -108,7 +150,10 @@ export async function POST(
     const { id: taskId } = await params;
 
     if (!taskId) {
-      return NextResponse.json({ error: "Task ID is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Task ID is required" },
+        { status: 400 }
+      );
     }
 
     const body = await request.json();
@@ -172,12 +217,22 @@ export async function POST(
     // If first scheduled time, timeRequired stays as the original allocated time (no update needed)
 
     // Sync to Outlook immediately (fire and forget, but with better logging)
-    syncScheduledTimeToOutlook(session.user.id, taskId, scheduledTime.id, "create", task, {
-      startTime: scheduledTime.startTime,
-      duration: scheduledTime.duration,
-    })
+    syncScheduledTimeToOutlook(
+      session.user.id,
+      taskId,
+      scheduledTime.id,
+      "create",
+      task,
+      {
+        startTime: scheduledTime.startTime,
+        duration: scheduledTime.duration,
+      }
+    )
       .then(() => {
-        console.log("Successfully synced scheduled time to Outlook:", scheduledTime.id);
+        console.log(
+          "Successfully synced scheduled time to Outlook:",
+          scheduledTime.id
+        );
       })
       .catch((error) => {
         // Log error but don't fail the request
@@ -234,5 +289,3 @@ export async function GET(
     );
   }
 }
-
-

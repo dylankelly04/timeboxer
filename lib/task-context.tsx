@@ -102,7 +102,6 @@ export function TaskProvider({ children }: { children: ReactNode }) {
               }),
             });
           } catch (error) {
-            // Silently fail - Outlook sync is optional
             console.error("Failed to sync to Outlook:", error);
           }
         }

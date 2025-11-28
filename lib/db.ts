@@ -2,14 +2,14 @@ import { drizzle } from "drizzle-orm/libsql";
 import { createClient } from "@libsql/client";
 import * as schema from "@/drizzle/schema";
 
-// Determine if we're using Turso (libsql://) or local SQLite (file://)
+// Support both Turso (cloud) and local SQLite (self-hosted)
 const databaseUrl = process.env.DATABASE_URL || "file:./dev.db";
 const isTurso =
   databaseUrl.startsWith("libsql://") || databaseUrl.startsWith("libsql:");
 
 let client;
 if (isTurso) {
-  // Turso connection
+  // Turso (cloud) connection - requires auth token
   const authToken = process.env.TURSO_AUTH_TOKEN;
   if (!authToken) {
     throw new Error("TURSO_AUTH_TOKEN is required when using Turso database");
@@ -19,7 +19,7 @@ if (isTurso) {
     authToken,
   });
 } else {
-  // Local SQLite file
+  // Local SQLite file (self-hosted) - no auth token needed
   const dbPath = databaseUrl.replace(/^file:/, "");
   client = createClient({
     url: `file:${dbPath}`,

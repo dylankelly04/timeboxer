@@ -13,7 +13,9 @@ export interface OutlookTokens {
 /**
  * Get valid access token for a user, refreshing if necessary
  */
-export async function getValidAccessToken(userId: string): Promise<string | null> {
+export async function getValidAccessToken(
+  userId: string
+): Promise<string | null> {
   const [integration] = await db
     .select()
     .from(outlookIntegrations)
@@ -56,10 +58,14 @@ export async function getValidAccessToken(userId: string): Promise<string | null
 /**
  * Refresh access token using refresh token
  */
-async function refreshAccessToken(refreshToken: string): Promise<OutlookTokens | null> {
+async function refreshAccessToken(
+  refreshToken: string
+): Promise<OutlookTokens | null> {
   const clientId = process.env.OUTLOOK_CLIENT_ID;
   const clientSecret = process.env.OUTLOOK_CLIENT_SECRET;
-  const redirectUri = process.env.OUTLOOK_REDIRECT_URI || `${process.env.NEXTAUTH_URL}/api/auth/outlook/callback`;
+  const redirectUri =
+    process.env.OUTLOOK_REDIRECT_URI ||
+    `${process.env.NEXTAUTH_URL}/api/auth/outlook/callback`;
 
   if (!clientId || !clientSecret) {
     console.error("Outlook OAuth credentials not configured");
@@ -67,19 +73,22 @@ async function refreshAccessToken(refreshToken: string): Promise<OutlookTokens |
   }
 
   try {
-    const response = await fetch("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-        redirect_uri: redirectUri,
-      }),
-    });
+    const response = await fetch(
+      "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: refreshToken,
+          grant_type: "refresh_token",
+          redirect_uri: redirectUri,
+        }),
+      }
+    );
 
     if (!response.ok) {
       const error = await response.text();
@@ -104,7 +113,9 @@ async function refreshAccessToken(refreshToken: string): Promise<OutlookTokens |
 /**
  * Get user's default calendar ID
  */
-export async function getDefaultCalendarId(accessToken: string): Promise<string | null> {
+export async function getDefaultCalendarId(
+  accessToken: string
+): Promise<string | null> {
   try {
     const response = await fetch(`${GRAPH_API_BASE}/me/calendars`, {
       headers: {
@@ -118,7 +129,8 @@ export async function getDefaultCalendarId(accessToken: string): Promise<string 
     }
 
     const data = await response.json();
-    const defaultCalendar = data.value?.find((cal: any) => cal.isDefaultCalendar) || data.value?.[0];
+    const defaultCalendar =
+      data.value?.find((cal: any) => cal.isDefaultCalendar) || data.value?.[0];
     return defaultCalendar?.id || null;
   } catch (error) {
     console.error("Error fetching calendar ID:", error);
@@ -147,18 +159,26 @@ export async function createCalendarEvent(
       end: event.end.dateTime,
     });
 
-    const response = await fetch(`${GRAPH_API_BASE}/me/calendars/${calendarId}/events`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(event),
-    });
+    const response = await fetch(
+      `${GRAPH_API_BASE}/me/calendars/${calendarId}/events`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(event),
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Failed to create calendar event - HTTP", response.status, ":", errorText);
+      console.error(
+        "Failed to create calendar event - HTTP",
+        response.status,
+        ":",
+        errorText
+      );
       try {
         const errorJson = JSON.parse(errorText);
         console.error("Error details:", errorJson);
@@ -173,7 +193,10 @@ export async function createCalendarEvent(
     return data.id;
   } catch (error) {
     console.error("Error creating calendar event:", error);
-    console.error("Error details:", error instanceof Error ? error.message : String(error));
+    console.error(
+      "Error details:",
+      error instanceof Error ? error.message : String(error)
+    );
     return null;
   }
 }
@@ -193,14 +216,17 @@ export async function updateCalendarEvent(
   }
 ): Promise<boolean> {
   try {
-    const response = await fetch(`${GRAPH_API_BASE}/me/calendars/${calendarId}/events/${eventId}`, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(event),
-    });
+    const response = await fetch(
+      `${GRAPH_API_BASE}/me/calendars/${calendarId}/events/${eventId}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(event),
+      }
+    );
 
     if (!response.ok) {
       const error = await response.text();
@@ -224,12 +250,15 @@ export async function deleteCalendarEvent(
   eventId: string
 ): Promise<boolean> {
   try {
-    const response = await fetch(`${GRAPH_API_BASE}/me/calendars/${calendarId}/events/${eventId}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+    const response = await fetch(
+      `${GRAPH_API_BASE}/me/calendars/${calendarId}/events/${eventId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
 
     if (!response.ok) {
       const error = await response.text();
@@ -266,16 +295,22 @@ export async function fetchCalendarEvents(
   startDateTime: string,
   endDateTime: string,
   timeZone: string = "UTC"
-): Promise<Array<{
-  id: string;
-  subject: string;
-  start: { dateTime: string; timeZone: string };
-  end: { dateTime: string; timeZone: string };
-  body?: { content: string };
-}>> {
+): Promise<
+  Array<{
+    id: string;
+    subject: string;
+    start: { dateTime: string; timeZone: string };
+    end: { dateTime: string; timeZone: string };
+    body?: { content: string };
+  }>
+> {
   try {
     const response = await fetch(
-      `${GRAPH_API_BASE}/me/calendars/${calendarId}/calendarView?startDateTime=${encodeURIComponent(startDateTime)}&endDateTime=${encodeURIComponent(endDateTime)}&$orderby=start/dateTime`,
+      `${GRAPH_API_BASE}/me/calendars/${calendarId}/calendarView?startDateTime=${encodeURIComponent(
+        startDateTime
+      )}&endDateTime=${encodeURIComponent(
+        endDateTime
+      )}&$orderby=start/dateTime`,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -313,7 +348,9 @@ export async function createCalendarSubscription(
   try {
     // Calculate expiration time
     const expirationDateTime = new Date();
-    expirationDateTime.setMinutes(expirationDateTime.getMinutes() + expirationMinutes);
+    expirationDateTime.setMinutes(
+      expirationDateTime.getMinutes() + expirationMinutes
+    );
 
     const response = await fetch(`${GRAPH_API_BASE}/subscriptions`, {
       method: "POST",
@@ -357,18 +394,23 @@ export async function renewCalendarSubscription(
 ): Promise<boolean> {
   try {
     const expirationDateTime = new Date();
-    expirationDateTime.setMinutes(expirationDateTime.getMinutes() + expirationMinutes);
+    expirationDateTime.setMinutes(
+      expirationDateTime.getMinutes() + expirationMinutes
+    );
 
-    const response = await fetch(`${GRAPH_API_BASE}/subscriptions/${subscriptionId}`, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        expirationDateTime: expirationDateTime.toISOString(),
-      }),
-    });
+    const response = await fetch(
+      `${GRAPH_API_BASE}/subscriptions/${subscriptionId}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expirationDateTime: expirationDateTime.toISOString(),
+        }),
+      }
+    );
 
     return response.ok;
   } catch (error) {
@@ -385,12 +427,15 @@ export async function deleteCalendarSubscription(
   subscriptionId: string
 ): Promise<boolean> {
   try {
-    const response = await fetch(`${GRAPH_API_BASE}/subscriptions/${subscriptionId}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+    const response = await fetch(
+      `${GRAPH_API_BASE}/subscriptions/${subscriptionId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
 
     return response.ok;
   } catch (error) {
