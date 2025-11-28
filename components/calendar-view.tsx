@@ -720,9 +720,10 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-5 w-5 opacity-0 group-hover:opacity-100 -mr-1 -mt-1 hover:bg-primary-foreground/20 text-primary-foreground"
+                          className="h-5 w-5 opacity-70 group-hover:opacity-100 -mr-1 -mt-1 hover:bg-primary-foreground/20 text-primary-foreground flex-shrink-0"
                           onClick={async (e) => {
                             e.stopPropagation()
+                            e.preventDefault()
                             // Delete this specific scheduled time slot
                             try {
                               const response = await fetch(
@@ -730,11 +731,27 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
                                 { method: "DELETE" }
                               )
                               if (response.ok) {
+                                // Force a refresh to ensure UI updates
                                 await refreshTasks()
+                                // Also trigger Outlook events refresh if needed
+                                if (session?.user) {
+                                  // Small delay to ensure database is updated
+                                  setTimeout(() => {
+                                    refreshTasks()
+                                  }, 100)
+                                }
+                              } else {
+                                const errorData = await response.json().catch(() => ({}))
+                                console.error("Error deleting scheduled time:", response.status, errorData)
+                                alert(`Failed to delete: ${errorData.error || "Unknown error"}`)
                               }
                             } catch (error) {
                               console.error("Error deleting scheduled time:", error)
+                              alert("Failed to delete scheduled time. Please try again.")
                             }
+                          }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation()
                           }}
                         >
                           <X className="h-3 w-3" />

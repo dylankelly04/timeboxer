@@ -78,6 +78,7 @@ export const taskScheduledTimes = sqliteTable(
       .references(() => tasks.id, { onDelete: "cascade" }),
     startTime: text("startTime").notNull(), // ISO datetime string
     duration: integer("duration").notNull(), // Duration in minutes
+    outlookEventId: text("outlookEventId"), // Outlook calendar event ID for syncing
     createdAt: integer("createdAt", { mode: "timestamp" })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -100,7 +101,9 @@ export const outlookIntegrations = sqliteTable("outlook_integrations", {
   expiresAt: integer("expiresAt", { mode: "timestamp" }).notNull(),
   calendarId: text("calendarId"), // Outlook calendar ID
   subscriptionId: text("subscriptionId"), // Webhook subscription ID
-  subscriptionExpiresAt: integer("subscriptionExpiresAt", { mode: "timestamp" }), // When subscription expires
+  subscriptionExpiresAt: integer("subscriptionExpiresAt", {
+    mode: "timestamp",
+  }), // When subscription expires
   syncEnabled: integer("syncEnabled", { mode: "boolean" })
     .notNull()
     .default(true),

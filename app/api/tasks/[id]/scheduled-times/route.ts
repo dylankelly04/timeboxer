@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { tasks, taskScheduledTimes, outlookIntegrations } from "@/drizzle/schema";
 import { eq, and } from "drizzle-orm";
-import { getValidAccessToken, createCalendarEvent } from "@/lib/outlook";
+import { getValidAccessToken, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent } from "@/lib/outlook";
 
 // Helper function to sync scheduled time to Outlook
 async function syncScheduledTimeToOutlook(
@@ -12,7 +12,7 @@ async function syncScheduledTimeToOutlook(
   scheduledTimeId: string,
   action: "create" | "update" | "delete",
   task: { title: string; description: string | null },
-  scheduledTime: { startTime: string; duration: number }
+  scheduledTime: { startTime: string; duration: number; outlookEventId?: string | null }
 ) {
   try {
     // Get Outlook integration
@@ -23,21 +23,30 @@ async function syncScheduledTimeToOutlook(
       .limit(1);
 
     if (!integration || !integration.syncEnabled || !integration.calendarId) {
+      console.log("Outlook sync skipped - integration not found or disabled:", {
+        hasIntegration: !!integration,
+        syncEnabled: integration?.syncEnabled,
+        hasCalendarId: !!integration?.calendarId,
+      });
       return; // Outlook not connected or sync disabled
     }
 
     const accessToken = await getValidAccessToken(userId);
     if (!accessToken) {
-      return;
-    }
-
-    if (action === "delete") {
-      // Can't easily delete without storing event ID
+      console.error("Outlook sync skipped - failed to get access token");
       return;
     }
 
     const startTime = new Date(scheduledTime.startTime);
     const endTime = new Date(startTime.getTime() + scheduledTime.duration * 60 * 1000);
+
+    if (action === "delete") {
+      // Delete the Outlook event if we have the event ID
+      if (scheduledTime.outlookEventId) {
+        await deleteCalendarEvent(accessToken, integration.calendarId, scheduledTime.outlookEventId);
+      }
+      return;
+    }
 
     const event = {
       subject: task.title,
@@ -57,10 +66,31 @@ async function syncScheduledTimeToOutlook(
         : undefined,
     };
 
-    await createCalendarEvent(accessToken, integration.calendarId, event);
+    if (action === "update" && scheduledTime.outlookEventId) {
+      // Update existing event
+      await updateCalendarEvent(accessToken, integration.calendarId, scheduledTime.outlookEventId, event);
+    } else {
+      // Create new event and store the event ID
+      console.log("Creating Outlook event for scheduled time:", scheduledTimeId);
+      const eventId = await createCalendarEvent(accessToken, integration.calendarId, event);
+      if (eventId) {
+        console.log("Outlook event created successfully:", eventId);
+        // Update the scheduled time with the Outlook event ID
+        await db
+          .update(taskScheduledTimes)
+          .set({ outlookEventId: eventId })
+          .where(eq(taskScheduledTimes.id, scheduledTimeId));
+        console.log("Stored Outlook event ID in scheduled time:", scheduledTimeId);
+      } else {
+        console.error("Failed to create Outlook event - createCalendarEvent returned null");
+      }
+    }
   } catch (error) {
-    // Silently fail - Outlook sync is optional
-    throw error;
+    // Log error details for debugging
+    console.error("Error syncing to Outlook:", error);
+    console.error("Error details:", error instanceof Error ? error.message : String(error));
+    console.error("Stack trace:", error instanceof Error ? error.stack : "No stack trace");
+    throw error; // Re-throw to be caught by caller
   }
 }
 
@@ -141,13 +171,19 @@ export async function POST(
     }
     // If first scheduled time, timeRequired stays as the original allocated time (no update needed)
 
-    // Sync to Outlook (fire and forget)
-    syncScheduledTimeToOutlook(session.user.id, taskId, scheduledTime.id, "create", task, scheduledTime).catch(
-      (error) => {
-        // Silently fail - Outlook sync is optional
+    // Sync to Outlook immediately (fire and forget, but with better logging)
+    syncScheduledTimeToOutlook(session.user.id, taskId, scheduledTime.id, "create", task, {
+      startTime: scheduledTime.startTime,
+      duration: scheduledTime.duration,
+    })
+      .then(() => {
+        console.log("Successfully synced scheduled time to Outlook:", scheduledTime.id);
+      })
+      .catch((error) => {
+        // Log error but don't fail the request
         console.error("Failed to sync scheduled time to Outlook:", error);
-      }
-    );
+        console.error("Error details:", error?.message, error?.stack);
+      });
 
     return NextResponse.json(scheduledTime, { status: 201 });
   } catch (error) {

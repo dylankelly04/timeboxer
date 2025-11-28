@@ -140,6 +140,13 @@ export async function createCalendarEvent(
   }
 ): Promise<string | null> {
   try {
+    console.log("Creating Outlook calendar event:", {
+      calendarId,
+      subject: event.subject,
+      start: event.start.dateTime,
+      end: event.end.dateTime,
+    });
+
     const response = await fetch(`${GRAPH_API_BASE}/me/calendars/${calendarId}/events`, {
       method: "POST",
       headers: {
@@ -150,15 +157,23 @@ export async function createCalendarEvent(
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error("Failed to create calendar event:", error);
+      const errorText = await response.text();
+      console.error("Failed to create calendar event - HTTP", response.status, ":", errorText);
+      try {
+        const errorJson = JSON.parse(errorText);
+        console.error("Error details:", errorJson);
+      } catch {
+        // Not JSON, already logged as text
+      }
       return null;
     }
 
     const data = await response.json();
+    console.log("Outlook event created successfully with ID:", data.id);
     return data.id;
   } catch (error) {
     console.error("Error creating calendar event:", error);
+    console.error("Error details:", error instanceof Error ? error.message : String(error));
     return null;
   }
 }
