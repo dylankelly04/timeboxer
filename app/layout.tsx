@@ -11,6 +11,9 @@ const geistMono = Geist_Mono({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Timeboxer",
   description: "Simple FOSS timeboxing app",
+  icons: {
+    icon: "/tbicon.png",
+  },
 };
 
 export default function RootLayout({

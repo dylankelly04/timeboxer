@@ -17,6 +17,11 @@ export function Header() {
       <header className="h-14 border-b border-border bg-card flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
+            <img
+              src="/tbicon.png"
+              alt="Timeboxer"
+              className="h-6 w-6"
+            />
             <h1 className="font-semibold text-lg">timeboxer</h1>
           </div>
         </div>
