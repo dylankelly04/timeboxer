@@ -88,6 +88,28 @@ export const taskScheduledTimes = sqliteTable(
   })
 );
 
+export const recurringEvents = sqliteTable("recurring_events", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"), // Optional description
+  timeOfDay: text("timeOfDay").notNull(), // Time in HH:mm format (e.g., "09:00")
+  duration: integer("duration").notNull(), // Duration in minutes
+  enabled: integer("enabled", { mode: "boolean" })
+    .notNull()
+    .default(true),
+  createdAt: integer("createdAt", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" })
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
 export const outlookIntegrations = sqliteTable("outlook_integrations", {
   id: text("id")
     .primaryKey()

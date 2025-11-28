@@ -92,7 +92,7 @@ export function TaskCard({
       draggable
       onDragStart={handleDragStart}
     >
-      <div className="flex items-start gap-2">
+      <div className="flex items-center gap-2">
         <div className="flex-1 min-w-0">
           <h4
             className={cn(
