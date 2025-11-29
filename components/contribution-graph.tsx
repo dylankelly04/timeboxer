@@ -184,9 +184,9 @@ export function ContributionGraph({
                       "bg-green-300 dark:bg-green-600 border-green-200/30 dark:border-green-400/30", // 8-10 hours
                     intensity === 6 &&
                       "bg-green-200 dark:bg-green-500 border-green-100/30 dark:border-green-300/30", // 10-12+ hours
-                    // Today should keep its intensity color, but have a subtle neutral outline
+                    // Today keeps its intensity color, but gets a neutral inner border
                     isToday &&
-                      "ring-[1.5px] ring-zinc-400/70 dark:ring-zinc-200/70 ring-offset-0"
+                      "border-[1.5px] border-zinc-200/90 dark:border-zinc-100/80"
                   )}
                   onMouseEnter={() => setHoveredDate(date)}
                   onMouseLeave={() => setHoveredDate(null)}
