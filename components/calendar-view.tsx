@@ -389,23 +389,33 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
 
-    // Get the task duration from drag data (set during dragStart)
-    const taskDurationStr = e.dataTransfer.getData("taskDuration");
+    // Determine the correct duration for the dragged item based on source data
     const taskId = e.dataTransfer.getData("taskId");
+    const scheduledTimeId = e.dataTransfer.getData("scheduledTimeId");
 
-    let taskDuration = taskDurationStr ? parseInt(taskDurationStr, 10) : NaN;
+    let taskDuration = 30; // sensible default
 
-    // Fallback: if duration wasn't provided or couldn't be parsed, derive it from the task
-    if ((!taskDurationStr || Number.isNaN(taskDuration)) && taskId) {
+    if (taskId) {
       const task = tasks.find((t) => t.id === taskId);
       if (task) {
-        taskDuration = task.timeRequired || 30;
+        // If dragging an existing scheduled slot from the calendar, prefer that slot's duration
+        if (
+          scheduledTimeId &&
+          scheduledTimeId !== "undefined" &&
+          task.scheduledTimes &&
+          task.scheduledTimes.length > 0
+        ) {
+          const scheduledTime = task.scheduledTimes.find(
+            (st) => st.id === scheduledTimeId
+          );
+          if (scheduledTime) {
+            taskDuration = scheduledTime.duration;
+          }
+        } else {
+          // Otherwise use the task's estimated timeRequired
+          taskDuration = task.timeRequired || 30;
+        }
       }
-    }
-
-    // Final safety fallback
-    if (!taskDuration || taskDuration <= 0) {
-      taskDuration = 30;
     }
 
     // Calculate exact drop position to show accurate highlight
