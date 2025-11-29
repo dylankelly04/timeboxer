@@ -3,7 +3,12 @@ import { ThemeProvider as NextThemesProvider, type ThemeProviderProps, useTheme 
 
 export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
   return (
-    <NextThemesProvider attribute="class" defaultTheme="light" enableSystem={false} {...props}>
+    <NextThemesProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem={true}
+      {...props}
+    >
       {children}
     </NextThemesProvider>
   )
