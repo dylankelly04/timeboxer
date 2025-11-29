@@ -23,7 +23,7 @@ export function ArchiveDialog({ open, onOpenChange }: ArchiveDialogProps) {
   const { tasks } = useTasks();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Filter for completed tasks whose due date is today or in the past, and sort chronologically (oldest first)
+  // Filter for completed tasks whose due date is today or in the past, and sort reverse chronologically (newest first)
   const archivedTasks = useMemo(() => {
     const today = startOfDay(new Date());
 
@@ -38,10 +38,10 @@ export function ArchiveDialog({ open, onOpenChange }: ArchiveDialogProps) {
         return isBefore(dueDateStart, today) || isSameDay(dueDateStart, today);
       })
       .sort((a, b) => {
-        // Sort by due date (oldest first)
+        // Sort by due date (newest first - reverse chronological)
         const dateA = new Date(a.dueDate + "T00:00:00");
         const dateB = new Date(b.dueDate + "T00:00:00");
-        return dateA.getTime() - dateB.getTime();
+        return dateB.getTime() - dateA.getTime();
       });
   }, [tasks]);
 
@@ -64,7 +64,7 @@ export function ArchiveDialog({ open, onOpenChange }: ArchiveDialogProps) {
     return Object.keys(tasksByDate).sort((a, b) => {
       const dateA = new Date(a + "T00:00:00");
       const dateB = new Date(b + "T00:00:00");
-      return dateA.getTime() - dateB.getTime(); // Oldest first (chronological order)
+      return dateB.getTime() - dateA.getTime(); // Newest first (reverse chronological order)
     });
   }, [tasksByDate]);
 

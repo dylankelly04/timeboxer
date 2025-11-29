@@ -184,16 +184,13 @@ function AllTasksView({ scheduledTasks, pendingTasks, completedTasks, onAddTask,
           </div>
         )}
       </div>
-      <div className="p-3 border-t border-border bg-card">
-        <Button
-          variant="ghost"
-          className="w-full justify-start text-muted-foreground hover:text-foreground"
-          onClick={onAddTask}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add task
-        </Button>
-      </div>
+      <button
+        className="p-3 border-t border-border bg-card w-full flex items-center text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer transition-colors"
+        onClick={onAddTask}
+      >
+        <Plus className="h-4 w-4 mr-2" />
+        Add task
+      </button>
     </div>
   )
 }
