@@ -182,7 +182,7 @@ export function ContributionGraph({
                       "bg-green-300 dark:bg-green-600 border-green-200/30 dark:border-green-400/30", // 8-10 hours
                     intensity === 6 &&
                       "bg-green-200 dark:bg-green-500 border-green-100/30 dark:border-green-300/30", // 10-12+ hours
-                    isToday && "ring-1 ring-primary ring-offset-0 shadow-sm"
+                    isToday && "bg-zinc-500/40 dark:bg-zinc-400/40 border-zinc-400/60 dark:border-zinc-300/60"
                   )}
                   onMouseEnter={() => setHoveredDate(date)}
                   onMouseLeave={() => setHoveredDate(null)}

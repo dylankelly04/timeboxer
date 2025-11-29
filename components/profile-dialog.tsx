@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSession, signIn, signOut } from "next-auth/react";
+import { useSession, signIn } from "next-auth/react";
 import { User, Mail, Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,8 +73,7 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
     }
   };
 
-  const handleSignOut = async () => {
-    await signOut({ redirect: true });
+  const handleSignOut = () => {
     onOpenChange(false);
   };
 
