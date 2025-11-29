@@ -391,7 +391,22 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
 
     // Get the task duration from drag data (set during dragStart)
     const taskDurationStr = e.dataTransfer.getData("taskDuration");
-    const taskDuration = taskDurationStr ? parseInt(taskDurationStr, 10) : 30;
+    const taskId = e.dataTransfer.getData("taskId");
+
+    let taskDuration = taskDurationStr ? parseInt(taskDurationStr, 10) : NaN;
+
+    // Fallback: if duration wasn't provided or couldn't be parsed, derive it from the task
+    if ((!taskDurationStr || Number.isNaN(taskDuration)) && taskId) {
+      const task = tasks.find((t) => t.id === taskId);
+      if (task) {
+        taskDuration = task.timeRequired || 30;
+      }
+    }
+
+    // Final safety fallback
+    if (!taskDuration || taskDuration <= 0) {
+      taskDuration = 30;
+    }
 
     // Calculate exact drop position to show accurate highlight
     const hourSlot = e.currentTarget as HTMLElement;
