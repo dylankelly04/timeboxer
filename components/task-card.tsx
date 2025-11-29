@@ -126,7 +126,7 @@ export function TaskCard({
   return (
     <Card
       className={cn(
-        "group relative p-3 transition-all duration-200 cursor-pointer",
+        "group relative transition-all duration-200 cursor-pointer overflow-hidden",
         "hover:shadow-md hover:border-primary/30",
         isDragging && "opacity-50 shadow-lg rotate-2",
         task.completed && "opacity-60",
@@ -140,137 +140,139 @@ export function TaskCard({
       draggable
       onDragStart={handleDragStart}
     >
-      <div className="flex items-center gap-2">
-        <div className="flex-1 min-w-0">
+      <div className="p-3 pb-2">
+        {/* Title row with action buttons */}
+        <div className="flex items-start gap-2">
           <h4
             className={cn(
-              "font-medium text-sm leading-tight truncate",
+              "flex-1 font-medium text-sm leading-tight truncate",
               task.completed && "line-through text-muted-foreground"
             )}
           >
             {task.title}
           </h4>
 
-          {task.description && (
-            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-              {task.description}
-            </p>
-          )}
-
-          <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground whitespace-nowrap">
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {hasProgress ? (
-                <span className="flex items-center gap-1">
-                  <span className="text-green-600 dark:text-green-500 font-medium">
-                    {formatDuration(completedMinutes)}
-                  </span>
-                  <span className="text-muted-foreground/60">/</span>
-                  <span>{formatDuration(task.timeRequired)}</span>
-                </span>
-              ) : (
-                formatDuration(task.timeRequired)
+          {/* Don't show action buttons for archived tasks */}
+          {!taskIsArchived && (
+            <div
+              className={cn(
+                "flex items-center gap-0.5 transition-opacity shrink-0 -mt-0.5 -mr-1",
+                showActions ? "opacity-100" : "opacity-0"
               )}
-            </span>
-            <span className="flex items-center gap-1 whitespace-nowrap">
-              <Calendar className="h-3 w-3" />
-              {format(new Date(task.dueDate + "T00:00:00"), "MMM d")}
-            </span>
-          </div>
-
-          {/* Progress bar for tasks with completed time */}
-          {hasProgress && (
-            <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-green-500 transition-all duration-300"
-                style={{ width: `${progressPercent}%` }}
-              />
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {isRollover ? (
+                <>
+                  {/* Rollover task buttons: Add to today + Complete */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-primary hover:text-primary"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        await moveTaskToDate(task.id, new Date());
+                      } catch (error) {
+                        console.error("Failed to move task:", error);
+                      }
+                    }}
+                    title="Add to today"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-green-600 hover:text-green-700 dark:text-green-500 dark:hover:text-green-400"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        await updateTask(task.id, { completed: true });
+                      } catch (error) {
+                        console.error("Failed to complete task:", error);
+                      }
+                    }}
+                    title="Mark as complete"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {/* Regular task buttons: Complete + Delete */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-green-600 hover:text-green-700 dark:text-green-500 dark:hover:text-green-400"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        await updateTask(task.id, { completed: !task.completed });
+                      } catch (error) {
+                        console.error("Failed to update task:", error);
+                      }
+                    }}
+                    title={task.completed ? "Mark as incomplete" : "Mark as complete"}
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-destructive hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteTask(task.id);
+                    }}
+                    title="Delete task"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </div>
 
-        {/* Don't show action buttons for archived tasks */}
-        {!taskIsArchived && (
-          <div
-            className={cn(
-              "flex items-center gap-1 transition-opacity",
-              showActions ? "opacity-100" : "opacity-0"
-            )}
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            {isRollover ? (
-              <>
-                {/* Rollover task buttons: Add to today + Complete */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-primary hover:text-primary"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    try {
-                      await moveTaskToDate(task.id, new Date());
-                    } catch (error) {
-                      console.error("Failed to move task:", error);
-                    }
-                  }}
-                  title="Add to today"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-green-600 hover:text-green-700 dark:text-green-500 dark:hover:text-green-400"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    try {
-                      await updateTask(task.id, { completed: true });
-                    } catch (error) {
-                      console.error("Failed to complete task:", error);
-                    }
-                  }}
-                  title="Mark as complete"
-                >
-                  <Check className="h-3.5 w-3.5" />
-                </Button>
-              </>
-            ) : (
-              <>
-                {/* Regular task buttons: Complete + Delete */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-green-600 hover:text-green-700 dark:text-green-500 dark:hover:text-green-400"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    try {
-                      await updateTask(task.id, { completed: !task.completed });
-                    } catch (error) {
-                      console.error("Failed to update task:", error);
-                    }
-                  }}
-                  title={task.completed ? "Mark as incomplete" : "Mark as complete"}
-                >
-                  <Check className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-destructive hover:text-destructive"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteTask(task.id);
-                  }}
-                  title="Delete task"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </>
-            )}
-          </div>
+        {task.description && (
+          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+            {task.description}
+          </p>
         )}
+
+        {/* Metadata row - below title/buttons */}
+        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground whitespace-nowrap">
+          <span className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {hasProgress ? (
+              <span className="flex items-center gap-1">
+                <span className="text-green-600 dark:text-green-500 font-medium">
+                  {formatDuration(completedMinutes)}
+                </span>
+                <span className="text-muted-foreground/60">/</span>
+                <span>{formatDuration(task.timeRequired)}</span>
+              </span>
+            ) : (
+              formatDuration(task.timeRequired)
+            )}
+          </span>
+          <span className="flex items-center gap-1 whitespace-nowrap">
+            <Calendar className="h-3 w-3" />
+            {format(new Date(task.dueDate + "T00:00:00"), "MMM d")}
+          </span>
+        </div>
       </div>
+
+      {/* Progress bar spanning full width at bottom */}
+      {hasProgress && (
+        <div className="h-1.5 bg-muted/50 w-full">
+          <div
+            className="h-full bg-green-500 transition-all duration-300"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      )}
     </Card>
   );
 }
