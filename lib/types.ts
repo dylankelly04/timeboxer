@@ -22,3 +22,10 @@ export interface CalendarEvent {
   startTime: string
   endTime: string
 }
+
+export interface Reminder {
+  id: string
+  text: string
+  startDate: string // ISO date string (YYYY-MM-DD)
+  endDate: string // ISO date string (YYYY-MM-DD)
+}

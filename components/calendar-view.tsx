@@ -31,7 +31,8 @@ import { cn } from "@/lib/utils";
 import { useTasks } from "@/lib/task-context";
 import { useSession } from "next-auth/react";
 import { RecurringEventForm } from "@/components/recurring-event-form";
-import type { Task } from "@/lib/types";
+import { ReminderForm } from "@/components/reminder-form";
+import type { Task, Reminder } from "@/lib/types";
 
 const HOUR_HEIGHT = 60;
 // Slight extra vertical padding so you can scroll past the first/last hour labels
@@ -70,7 +71,9 @@ interface MonthViewProps {
   tasks: Task[];
   outlookEvents: OutlookEvent[];
   recurringEvents: RecurringEvent[];
+  reminders: Reminder[];
   onAddTask?: (date: Date, scheduledTime?: string, duration?: number) => void;
+  onCreateReminder?: (startDate: string, endDate: string) => void;
   getScheduledTasksForDate: (date: Date) => Array<{
     task: Task;
     scheduledTime: { id: string; startTime: string; duration: number };
@@ -87,11 +90,16 @@ function MonthView({
   tasks,
   outlookEvents,
   recurringEvents,
+  reminders,
   onAddTask,
+  onCreateReminder,
   getScheduledTasksForDate,
   getRecurringEventsForDate,
 }: MonthViewProps) {
   const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const [dragStart, setDragStart] = useState<Date | null>(null);
+  const [dragEnd, setDragEnd] = useState<Date | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Get tasks for a specific date (by startDate)
   const getTasksForDate = (date: Date) => {
@@ -112,6 +120,60 @@ function MonthView({
       return format(eventStart, "yyyy-MM-dd") === dateStr;
     });
   };
+
+  // Get reminders for a specific date
+  const getRemindersForDate = (date: Date) => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    return reminders.filter(
+      (r) => r.startDate <= dateStr && r.endDate >= dateStr
+    );
+  };
+
+  // Check if a date is in the current drag selection
+  const isInDragSelection = (date: Date) => {
+    if (!dragStart || !dragEnd) return false;
+    const start = dragStart < dragEnd ? dragStart : dragEnd;
+    const end = dragStart < dragEnd ? dragEnd : dragStart;
+    return date >= start && date <= end;
+  };
+
+  const handleMouseDown = (date: Date, e: React.MouseEvent) => {
+    e.preventDefault();
+    setDragStart(date);
+    setDragEnd(date);
+    setIsDragging(true);
+  };
+
+  const handleMouseEnter = (date: Date) => {
+    if (isDragging) {
+      setDragEnd(date);
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (isDragging && dragStart && dragEnd && onCreateReminder) {
+      const start = dragStart < dragEnd ? dragStart : dragEnd;
+      const end = dragStart < dragEnd ? dragEnd : dragStart;
+      onCreateReminder(format(start, "yyyy-MM-dd"), format(end, "yyyy-MM-dd"));
+    }
+    setIsDragging(false);
+    setDragStart(null);
+    setDragEnd(null);
+  };
+
+  // Add global mouse up listener
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      if (isDragging) {
+        handleMouseUp();
+      }
+    };
+
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+    };
+  }, [isDragging, dragStart, dragEnd]);
 
   // Group days into weeks
   const weeks: Date[][] = [];
@@ -135,8 +197,13 @@ function MonthView({
         ))}
       </div>
 
+      {/* Drag instruction */}
+      <div className="px-3 py-1.5 text-[10px] text-muted-foreground bg-muted/30 border-b border-border">
+        Drag across days to create a reminder
+      </div>
+
       {/* Calendar grid */}
-      <div className="flex-1 flex flex-col overflow-y-auto">
+      <div className="flex-1 flex flex-col overflow-y-auto select-none">
         {weeks.map((week, weekIndex) => (
           <div
             key={weekIndex}
@@ -148,22 +215,30 @@ function MonthView({
               const scheduledTasks = getScheduledTasksForDate(date);
               const dayOutlookEvents = getOutlookEventsForDate(date);
               const dayRecurringEvents = getRecurringEventsForDate(date);
+              const dayReminders = getRemindersForDate(date);
+              const isSelected = isInDragSelection(date);
 
               const totalItems =
                 dayTasks.length +
                 scheduledTasks.length +
                 dayOutlookEvents.length +
-                dayRecurringEvents.length;
+                dayRecurringEvents.length +
+                dayReminders.length;
 
               return (
                 <div
                   key={date.toISOString()}
                   className={cn(
-                    "border-r border-b border-border last:border-r-0 p-1 flex flex-col cursor-pointer hover:bg-muted/50 transition-colors",
-                    !isCurrentMonth && "bg-muted/20"
+                    "border-r border-b border-border last:border-r-0 p-1 flex flex-col cursor-crosshair transition-colors",
+                    !isCurrentMonth && "bg-muted/20",
+                    isSelected && "bg-red-500/20"
                   )}
-                  onClick={() => {
-                    if (onAddTask) {
+                  onMouseDown={(e) => handleMouseDown(date, e)}
+                  onMouseEnter={() => handleMouseEnter(date)}
+                  onClick={(e) => {
+                    // Only trigger add task if not dragging
+                    if (!isDragging && onAddTask) {
+                      e.stopPropagation();
                       onAddTask(date);
                     }
                   }}
@@ -181,9 +256,21 @@ function MonthView({
 
                   {/* Task/Event indicators */}
                   <div className="flex-1 space-y-0.5 overflow-hidden">
+                    {/* Reminders */}
+                    {dayReminders.slice(0, 1).map((reminder) => (
+                      <div
+                        key={reminder.id}
+                        className="text-[10px] px-1 py-0.5 rounded bg-red-500/30 text-red-600 dark:text-red-400 truncate"
+                        title={reminder.text}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {reminder.text}
+                      </div>
+                    ))}
+
                     {/* Scheduled tasks */}
                     {scheduledTasks
-                      .slice(0, 2)
+                      .slice(0, 2 - dayReminders.length)
                       .map(({ task, scheduledTime }) => (
                         <div
                           key={scheduledTime.id}
@@ -200,7 +287,13 @@ function MonthView({
                       .filter(
                         (t) => !scheduledTasks.some((st) => st.task.id === t.id)
                       )
-                      .slice(0, 2 - scheduledTasks.length)
+                      .slice(
+                        0,
+                        Math.max(
+                          0,
+                          2 - scheduledTasks.length - dayReminders.length
+                        )
+                      )
                       .map((task) => (
                         <div
                           key={task.id}
@@ -295,6 +388,12 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
     useState<RecurringEvent | null>(null);
   const [isRecurringEventFormOpen, setIsRecurringEventFormOpen] =
     useState(false);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [isReminderFormOpen, setIsReminderFormOpen] = useState(false);
+  const [reminderDefaultDates, setReminderDefaultDates] = useState<{
+    startDate: string;
+    endDate: string;
+  } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Get user's timezone
@@ -441,6 +540,50 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
       );
     };
   }, [fetchRecurringEvents]);
+
+  // Fetch reminders
+  const fetchReminders = useCallback(async () => {
+    if (!session?.user) {
+      setReminders([]);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/reminders");
+      if (response.ok) {
+        const data = await response.json();
+        setReminders(data);
+      }
+    } catch (error) {
+      console.error("Error fetching reminders:", error);
+      setReminders([]);
+    }
+  }, [session?.user]);
+
+  // Fetch reminders on mount and when user changes
+  useEffect(() => {
+    if (session?.user) {
+      fetchReminders();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
+
+  // Listen for reminder updates
+  useEffect(() => {
+    const handleReminderUpdate = () => {
+      fetchReminders();
+    };
+    window.addEventListener("reminderUpdated", handleReminderUpdate);
+    return () => {
+      window.removeEventListener("reminderUpdated", handleReminderUpdate);
+    };
+  }, [fetchReminders]);
+
+  // Handle creating reminder from month view drag
+  const handleCreateReminder = (startDate: string, endDate: string) => {
+    setReminderDefaultDates({ startDate, endDate });
+    setIsReminderFormOpen(true);
+  };
 
   // Fetch Outlook events when visible days change (initial load or navigation)
   useEffect(() => {
@@ -1079,7 +1222,9 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
           tasks={tasks}
           outlookEvents={outlookEvents}
           recurringEvents={recurringEvents}
+          reminders={reminders}
           onAddTask={onAddTask}
+          onCreateReminder={handleCreateReminder}
           getScheduledTasksForDate={getScheduledTasksForDate}
           getRecurringEventsForDate={getRecurringEventsForDate}
         />
@@ -1629,6 +1774,23 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
           fetchRecurringEvents();
           setEditingRecurringEvent(null);
           setIsRecurringEventFormOpen(false);
+        }}
+      />
+
+      <ReminderForm
+        open={isReminderFormOpen}
+        onOpenChange={(open) => {
+          setIsReminderFormOpen(open);
+          if (!open) {
+            setReminderDefaultDates(null);
+          }
+        }}
+        defaultStartDate={reminderDefaultDates?.startDate}
+        defaultEndDate={reminderDefaultDates?.endDate}
+        onSuccess={() => {
+          fetchReminders();
+          setReminderDefaultDates(null);
+          setIsReminderFormOpen(false);
         }}
       />
     </div>

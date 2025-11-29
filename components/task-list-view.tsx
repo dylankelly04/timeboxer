@@ -2,15 +2,17 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { format, addDays, startOfDay, isBefore, isSameDay } from "date-fns"
-import { List, CalendarDays, Plus, ChevronLeft, ChevronRight } from "lucide-react"
+import { List, CalendarDays, Plus, ChevronLeft, ChevronRight, Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
 import { DayColumn } from "./day-column"
+import { ReminderForm } from "./reminder-form"
 import { useTasks } from "@/lib/task-context"
-import type { Task } from "@/lib/types"
+import type { Task, Reminder } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { useSession } from "next-auth/react"
 
 type ViewMode = "all" | "by-day"
 
@@ -22,8 +24,59 @@ interface TaskListViewProps {
 
 export function TaskListView({ onAddTask, onEditTask, width }: TaskListViewProps) {
   const { tasks, moveTaskToDate } = useTasks()
+  const { data: session } = useSession()
   const [viewMode, setViewMode] = useState<ViewMode>("by-day")
   const [dayOffset, setDayOffset] = useState(0)
+  const [reminders, setReminders] = useState<Reminder[]>([])
+  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null)
+  const [isReminderFormOpen, setIsReminderFormOpen] = useState(false)
+
+  // Fetch reminders
+  const fetchReminders = useCallback(async () => {
+    if (!session?.user) {
+      setReminders([])
+      return
+    }
+
+    try {
+      const response = await fetch("/api/reminders")
+      if (response.ok) {
+        const data = await response.json()
+        setReminders(data)
+      }
+    } catch (error) {
+      console.error("Error fetching reminders:", error)
+    }
+  }, [session?.user])
+
+  useEffect(() => {
+    fetchReminders()
+  }, [fetchReminders])
+
+  // Listen for reminder updates
+  useEffect(() => {
+    const handleReminderUpdate = () => {
+      fetchReminders()
+    }
+
+    window.addEventListener("reminderUpdated", handleReminderUpdate)
+    return () => {
+      window.removeEventListener("reminderUpdated", handleReminderUpdate)
+    }
+  }, [fetchReminders])
+
+  // Get reminders for a specific date
+  const getRemindersForDate = (date: Date) => {
+    const dateStr = format(date, "yyyy-MM-dd")
+    return reminders.filter((reminder) => {
+      return reminder.startDate <= dateStr && reminder.endDate >= dateStr
+    })
+  }
+
+  const handleEditReminder = (reminder: Reminder) => {
+    setEditingReminder(reminder)
+    setIsReminderFormOpen(true)
+  }
 
   // For "by-day" view: 3 days starting from today + offset
   const today = startOfDay(new Date())
@@ -44,8 +97,9 @@ export function TaskListView({ onAddTask, onEditTask, width }: TaskListViewProps
     return isBefore(dueDateStart, today) || isSameDay(dueDateStart, today)
   }
 
-  const scheduledTasks = tasks.filter((t) => t.scheduledTime && !t.completed)
-  const pendingTasks = tasks.filter((t) => !t.scheduledTime && !t.completed)
+  const hasScheduledTime = (t: Task) => t.scheduledTime || (t.scheduledTimes && t.scheduledTimes.length > 0)
+  const scheduledTasks = tasks.filter((t) => hasScheduledTime(t) && !t.completed)
+  const pendingTasks = tasks.filter((t) => !hasScheduledTime(t) && !t.completed)
   const completedTasks = tasks.filter((t) => t.completed && !isArchivedTask(t))
 
   const goToPreviousDays = () => setDayOffset((prev) => prev - 3)
@@ -109,8 +163,10 @@ export function TaskListView({ onAddTask, onEditTask, width }: TaskListViewProps
           scheduledTasks={scheduledTasks}
           pendingTasks={pendingTasks}
           completedTasks={completedTasks}
+          reminders={reminders}
           onAddTask={() => onAddTask()}
           onEditTask={onEditTask}
+          onEditReminder={handleEditReminder}
         />
       ) : (
         <div className="flex-1 flex overflow-hidden">
@@ -119,12 +175,24 @@ export function TaskListView({ onAddTask, onEditTask, width }: TaskListViewProps
               key={date.toISOString()}
               date={date}
               tasks={getTasksForDate(date)}
+              reminders={getRemindersForDate(date)}
               onAddTask={onAddTask}
               onEditTask={onEditTask}
+              onEditReminder={handleEditReminder}
             />
           ))}
         </div>
       )}
+
+      <ReminderForm
+        open={isReminderFormOpen}
+        onOpenChange={(open) => {
+          setIsReminderFormOpen(open)
+          if (!open) setEditingReminder(null)
+        }}
+        editingReminder={editingReminder}
+        onSuccess={fetchReminders}
+      />
     </div>
   )
 }
@@ -133,12 +201,18 @@ interface AllTasksViewProps {
   scheduledTasks: Task[]
   pendingTasks: Task[]
   completedTasks: Task[]
+  reminders: Reminder[]
   onAddTask: () => void
   onEditTask: (task: Task) => void
+  onEditReminder: (reminder: Reminder) => void
 }
 
-function AllTasksView({ scheduledTasks, pendingTasks, completedTasks, onAddTask, onEditTask }: AllTasksViewProps) {
+function AllTasksView({ scheduledTasks, pendingTasks, completedTasks, reminders, onAddTask, onEditTask, onEditReminder }: AllTasksViewProps) {
   const { unscheduleTask } = useTasks()
+
+  // Get today's reminders for the "All Tasks" view
+  const todayStr = format(new Date(), "yyyy-MM-dd")
+  const todaysReminders = reminders.filter((r) => r.startDate <= todayStr && r.endDate >= todayStr)
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -188,6 +262,24 @@ function AllTasksView({ scheduledTasks, pendingTasks, completedTasks, onAddTask,
           </div>
         )}
       </div>
+
+      {/* Today's Reminders */}
+      {todaysReminders.length > 0 && (
+        <div className="px-3 py-2 border-t border-border space-y-1">
+          {todaysReminders.map((reminder) => (
+            <div
+              key={reminder.id}
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-red-500/20 text-red-600 dark:text-red-400 text-xs cursor-pointer hover:bg-red-500/30 transition-colors"
+              onClick={() => onEditReminder(reminder)}
+              title={`${reminder.startDate} - ${reminder.endDate}`}
+            >
+              <Bell className="h-3 w-3 shrink-0" />
+              <span className="truncate">{reminder.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <button
         className="p-3 border-t border-border bg-card w-full flex items-center text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer transition-colors"
         onClick={onAddTask}

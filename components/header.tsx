@@ -1,18 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { Calendar, Moon, Sun, User, Archive, Repeat } from "lucide-react";
+import { Calendar, Moon, Sun, User, Archive, Repeat, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "./theme-provider";
 import { ProfileDialog } from "./profile-dialog";
 import { ArchiveDialog } from "./archive-dialog";
 import { RecurringEventForm } from "./recurring-event-form";
+import { ReminderForm } from "./reminder-form";
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isArchiveOpen, setIsArchiveOpen] = useState(false);
   const [isRecurringEventOpen, setIsRecurringEventOpen] = useState(false);
+  const [isReminderOpen, setIsReminderOpen] = useState(false);
 
   return (
     <>
@@ -25,6 +27,16 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 bg-transparent"
+            onClick={() => setIsReminderOpen(true)}
+            title="Create Reminder"
+          >
+            <Bell className="h-4 w-4" />
+          </Button>
+
           <Button
             variant="outline"
             size="icon"
@@ -78,6 +90,10 @@ export function Header() {
           // Trigger a custom event to refresh the calendar
           window.dispatchEvent(new CustomEvent("recurringEventUpdated"));
         }}
+      />
+      <ReminderForm
+        open={isReminderOpen}
+        onOpenChange={setIsReminderOpen}
       />
     </>
   );

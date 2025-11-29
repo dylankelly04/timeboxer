@@ -11,25 +11,29 @@ import {
   isBefore,
   isSameDay,
 } from "date-fns";
-import { Plus } from "lucide-react";
+import { Plus, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TaskCard } from "./task-card";
 import { cn } from "@/lib/utils";
-import type { Task } from "@/lib/types";
+import type { Task, Reminder } from "@/lib/types";
 import { useTasks } from "@/lib/task-context";
 
 interface DayColumnProps {
   date: Date;
   tasks: Task[];
+  reminders?: Reminder[];
   onAddTask: (date: Date) => void;
   onEditTask: (task: Task) => void;
+  onEditReminder?: (reminder: Reminder) => void;
 }
 
 export function DayColumn({
   date,
   tasks,
+  reminders = [],
   onAddTask,
   onEditTask,
+  onEditReminder,
 }: DayColumnProps) {
   const { unscheduleTask, moveTaskToDate } = useTasks();
 
@@ -50,8 +54,14 @@ export function DayColumn({
     return isBefore(dueDateStart, today) || isSameDay(dueDateStart, today);
   };
 
-  const scheduledTasks = tasks.filter((t) => t.scheduledTime && !t.completed);
-  const pendingTasks = tasks.filter((t) => !t.scheduledTime && !t.completed);
+  const hasScheduledTime = (t: Task) =>
+    t.scheduledTime || (t.scheduledTimes && t.scheduledTimes.length > 0);
+  const scheduledTasks = tasks.filter(
+    (t) => hasScheduledTime(t) && !t.completed
+  );
+  const pendingTasks = tasks.filter(
+    (t) => !hasScheduledTime(t) && !t.completed
+  );
   const completedTasks = tasks.filter((t) => t.completed && !isArchivedTask(t));
 
   const totalTime = pendingTasks.reduce((sum, t) => sum + t.timeRequired, 0);
@@ -184,6 +194,23 @@ export function DayColumn({
             </div>
           )}
       </div>
+
+      {/* Reminders */}
+      {reminders.length > 0 && (
+        <div className="px-2 py-2 border-t border-border space-y-1">
+          {reminders.map((reminder) => (
+            <div
+              key={reminder.id}
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-red-500/20 text-red-600 dark:text-red-400 text-xs cursor-pointer hover:bg-red-500/30 transition-colors"
+              onClick={() => onEditReminder?.(reminder)}
+              title={`${reminder.startDate} - ${reminder.endDate}`}
+            >
+              <Bell className="h-3 w-3 shrink-0" />
+              <span className="truncate">{reminder.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <button
         className="p-3 border-t border-border flex items-center w-full text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer transition-colors"

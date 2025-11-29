@@ -99,9 +99,7 @@ export const recurringEvents = sqliteTable("recurring_events", {
   description: text("description"), // Optional description
   timeOfDay: text("timeOfDay").notNull(), // Time in HH:mm format (e.g., "09:00")
   duration: integer("duration").notNull(), // Duration in minutes
-  enabled: integer("enabled", { mode: "boolean" })
-    .notNull()
-    .default(true),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   createdAt: integer("createdAt", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -130,6 +128,24 @@ export const outlookIntegrations = sqliteTable("outlook_integrations", {
     .notNull()
     .default(true),
   lastSyncAt: integer("lastSyncAt", { mode: "timestamp" }),
+  createdAt: integer("createdAt", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp" })
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export const reminders = sqliteTable("reminders", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  startDate: text("startDate").notNull(), // ISO date string (YYYY-MM-DD)
+  endDate: text("endDate").notNull(), // ISO date string (YYYY-MM-DD)
   createdAt: integer("createdAt", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
