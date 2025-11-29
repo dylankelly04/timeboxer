@@ -137,16 +137,14 @@ export function DayColumn({ date, tasks, onAddTask, onEditTask }: DayColumnProps
         )}
       </div>
 
-      <div className="p-2 border-t border-border">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start text-muted-foreground hover:text-foreground text-xs"
+      <div className="p-3 border-t border-border flex items-center">
+        <button
+          className="flex items-center text-xs text-muted-foreground hover:text-foreground"
           onClick={() => onAddTask(date)}
         >
-          <Plus className="h-3.5 w-3.5 mr-1.5" />
+          <Plus className="h-3 w-3 mr-1.5" />
           Add task
-        </Button>
+        </button>
       </div>
     </div>
   )
