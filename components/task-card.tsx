@@ -272,7 +272,6 @@ export function TaskCard({
           />
         </div>
       )}
-      </div>
     </Card>
   );
 }
