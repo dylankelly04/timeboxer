@@ -17,9 +17,10 @@ type ViewMode = "all" | "by-day"
 interface TaskListViewProps {
   onAddTask: (date?: Date) => void
   onEditTask: (task: Task) => void
+  width?: number | null
 }
 
-export function TaskListView({ onAddTask, onEditTask }: TaskListViewProps) {
+export function TaskListView({ onAddTask, onEditTask, width }: TaskListViewProps) {
   const { tasks, moveTaskToDate } = useTasks()
   const [viewMode, setViewMode] = useState<ViewMode>("by-day")
   const [dayOffset, setDayOffset] = useState(0)
@@ -52,7 +53,10 @@ export function TaskListView({ onAddTask, onEditTask }: TaskListViewProps) {
   const goToToday = () => setDayOffset(0)
 
   return (
-    <div className="w-1/2 flex flex-col border-r border-border bg-muted/30">
+    <div
+      className="flex flex-col bg-muted/30 shrink-0"
+      style={{ width: width !== null && width !== undefined ? `${width}px` : "50%" }}
+    >
       {/* Header with toggle */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
         <h2 className="font-semibold">Tasks</h2>

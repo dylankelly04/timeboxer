@@ -1,14 +1,21 @@
 "use client";
 
 import type React from "react";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   format,
   setHours,
   setMinutes,
   isToday,
   addDays,
+  addMonths,
   startOfDay,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  isSameMonth,
+  isSameDay,
 } from "date-fns";
 import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 import { X, ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
@@ -32,7 +39,7 @@ const GRID_VERTICAL_PADDING = HOUR_HEIGHT / 2;
 const START_HOUR = 0;
 const END_HOUR = 24;
 
-type CalendarMode = "1-day" | "3-day";
+type CalendarMode = "1-day" | "3-day" | "7-day" | "month";
 
 interface OutlookEvent {
   id: string;
@@ -53,9 +60,200 @@ interface RecurringEvent {
 
 interface CalendarViewProps {
   onAddTask?: (date: Date, scheduledTime?: string, duration?: number) => void;
+  width?: string;
 }
 
-export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
+// Month View Component
+interface MonthViewProps {
+  visibleDays: Date[];
+  currentMonth: Date;
+  tasks: Task[];
+  outlookEvents: OutlookEvent[];
+  recurringEvents: RecurringEvent[];
+  onAddTask?: (date: Date, scheduledTime?: string, duration?: number) => void;
+  getScheduledTasksForDate: (date: Date) => Array<{
+    task: Task;
+    scheduledTime: { id: string; startTime: string; duration: number };
+  }>;
+  getRecurringEventsForDate: (date: Date) => Array<{
+    event: RecurringEvent;
+    startTime: string;
+  }>;
+}
+
+function MonthView({
+  visibleDays,
+  currentMonth,
+  tasks,
+  outlookEvents,
+  recurringEvents,
+  onAddTask,
+  getScheduledTasksForDate,
+  getRecurringEventsForDate,
+}: MonthViewProps) {
+  const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  // Get tasks for a specific date (by startDate)
+  const getTasksForDate = (date: Date) => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    return tasks.filter(
+      (task) => task.startDate === dateStr && !task.completed
+    );
+  };
+
+  // Get Outlook events for a specific date
+  const getOutlookEventsForDate = (date: Date) => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    return outlookEvents.filter((event) => {
+      const eventStart = toZonedTime(
+        new Date(event.start.dateTime + "Z"),
+        userTimeZone
+      );
+      return format(eventStart, "yyyy-MM-dd") === dateStr;
+    });
+  };
+
+  // Group days into weeks
+  const weeks: Date[][] = [];
+  for (let i = 0; i < visibleDays.length; i += 7) {
+    weeks.push(visibleDays.slice(i, i + 7));
+  }
+
+  const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Week day headers */}
+      <div className="grid grid-cols-7 border-b border-border">
+        {weekDays.map((day) => (
+          <div
+            key={day}
+            className="px-2 py-2 text-center text-xs font-medium text-muted-foreground border-r border-border last:border-r-0"
+          >
+            {day}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="flex-1 flex flex-col overflow-y-auto">
+        {weeks.map((week, weekIndex) => (
+          <div
+            key={weekIndex}
+            className="grid grid-cols-7 flex-1 min-h-[100px]"
+          >
+            {week.map((date, dayIndex) => {
+              const isCurrentMonth = isSameMonth(date, currentMonth);
+              const dayTasks = getTasksForDate(date);
+              const scheduledTasks = getScheduledTasksForDate(date);
+              const dayOutlookEvents = getOutlookEventsForDate(date);
+              const dayRecurringEvents = getRecurringEventsForDate(date);
+
+              const totalItems =
+                dayTasks.length +
+                scheduledTasks.length +
+                dayOutlookEvents.length +
+                dayRecurringEvents.length;
+
+              return (
+                <div
+                  key={date.toISOString()}
+                  className={cn(
+                    "border-r border-b border-border last:border-r-0 p-1 flex flex-col cursor-pointer hover:bg-muted/50 transition-colors",
+                    !isCurrentMonth && "bg-muted/20"
+                  )}
+                  onClick={() => {
+                    if (onAddTask) {
+                      onAddTask(date);
+                    }
+                  }}
+                >
+                  {/* Date number */}
+                  <div
+                    className={cn(
+                      "text-sm font-medium mb-1 w-7 h-7 flex items-center justify-center rounded-full",
+                      !isCurrentMonth && "text-muted-foreground",
+                      isToday(date) && "bg-primary text-primary-foreground"
+                    )}
+                  >
+                    {format(date, "d")}
+                  </div>
+
+                  {/* Task/Event indicators */}
+                  <div className="flex-1 space-y-0.5 overflow-hidden">
+                    {/* Scheduled tasks */}
+                    {scheduledTasks
+                      .slice(0, 2)
+                      .map(({ task, scheduledTime }) => (
+                        <div
+                          key={scheduledTime.id}
+                          className="text-[10px] px-1 py-0.5 rounded bg-primary/20 text-primary truncate"
+                          title={task.title}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {task.title}
+                        </div>
+                      ))}
+
+                    {/* Unscheduled tasks */}
+                    {dayTasks
+                      .filter(
+                        (t) => !scheduledTasks.some((st) => st.task.id === t.id)
+                      )
+                      .slice(0, 2 - scheduledTasks.length)
+                      .map((task) => (
+                        <div
+                          key={task.id}
+                          className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground truncate"
+                          title={task.title}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {task.title}
+                        </div>
+                      ))}
+
+                    {/* Outlook events */}
+                    {dayOutlookEvents.slice(0, 1).map((event) => (
+                      <div
+                        key={event.id}
+                        className="text-[10px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-600 dark:text-blue-400 truncate"
+                        title={event.subject}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {event.subject}
+                      </div>
+                    ))}
+
+                    {/* Recurring events */}
+                    {dayRecurringEvents.slice(0, 1).map(({ event }) => (
+                      <div
+                        key={event.id}
+                        className="text-[10px] px-1 py-0.5 rounded bg-orange-500/20 text-orange-600 dark:text-orange-400 truncate"
+                        title={event.title}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {event.title}
+                      </div>
+                    ))}
+
+                    {/* More indicator */}
+                    {totalItems > 3 && (
+                      <div className="text-[10px] text-muted-foreground px-1">
+                        +{totalItems - 3} more
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
   const { tasks, scheduleTask, unscheduleTask, updateTask, refreshTasks } =
     useTasks();
   const { data: session } = useSession();
@@ -104,10 +302,35 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
 
   const today = startOfDay(new Date());
   const startDay = addDays(today, dayOffset);
-  const visibleDays =
-    calendarMode === "1-day"
-      ? [startDay]
-      : [startDay, addDays(startDay, 1), addDays(startDay, 2)];
+
+  // For month view, we track monthOffset instead of dayOffset for navigation
+  const [monthOffset, setMonthOffset] = useState(0);
+  const currentMonth = addMonths(today, monthOffset);
+
+  // Calculate visible days based on mode
+  const visibleDays = useMemo(() => {
+    if (calendarMode === "1-day") {
+      return [startDay];
+    } else if (calendarMode === "3-day") {
+      return [startDay, addDays(startDay, 1), addDays(startDay, 2)];
+    } else if (calendarMode === "7-day") {
+      return Array.from({ length: 7 }, (_, i) => addDays(startDay, i));
+    } else {
+      // Month view - get all days to display in the calendar grid
+      const monthStart = startOfMonth(currentMonth);
+      const monthEnd = endOfMonth(currentMonth);
+      const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 }); // Sunday
+      const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+
+      const days: Date[] = [];
+      let day = calendarStart;
+      while (day <= calendarEnd) {
+        days.push(day);
+        day = addDays(day, 1);
+      }
+      return days;
+    }
+  }, [calendarMode, startDay, currentMonth]);
 
   // Hours used for slots (e.g., 0–23 for a 24-hour day)
   const hours = Array.from(
@@ -236,11 +459,39 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scheduledTasksHash, session?.user?.id]);
 
-  const goToPreviousDays = () =>
-    setDayOffset((prev) => prev - (calendarMode === "1-day" ? 1 : 3));
-  const goToNextDays = () =>
-    setDayOffset((prev) => prev + (calendarMode === "1-day" ? 1 : 3));
-  const goToToday = () => setDayOffset(0);
+  const getStepSize = () => {
+    switch (calendarMode) {
+      case "1-day":
+        return 1;
+      case "3-day":
+        return 3;
+      case "7-day":
+        return 7;
+      default:
+        return 1;
+    }
+  };
+
+  const goToPreviousDays = () => {
+    if (calendarMode === "month") {
+      setMonthOffset((prev) => prev - 1);
+    } else {
+      setDayOffset((prev) => prev - getStepSize());
+    }
+  };
+
+  const goToNextDays = () => {
+    if (calendarMode === "month") {
+      setMonthOffset((prev) => prev + 1);
+    } else {
+      setDayOffset((prev) => prev + getStepSize());
+    }
+  };
+
+  const goToToday = () => {
+    setDayOffset(0);
+    setMonthOffset(0);
+  };
 
   const getRecurringEventsForDate = (date: Date) => {
     const dateStr = format(date, "yyyy-MM-dd");
@@ -699,7 +950,10 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
   const now = new Date();
 
   return (
-    <div className="w-1/2 flex flex-col bg-card">
+    <div
+      className="flex flex-col bg-card flex-1 min-w-0"
+      style={width ? { width } : undefined}
+    >
       {/* Header with toggle */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <h2 className="font-semibold">Calendar</h2>
@@ -708,23 +962,45 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
             variant="ghost"
             size="sm"
             className={cn(
-              "h-7 px-3 text-xs",
+              "h-7 px-2 text-xs",
               calendarMode === "1-day" && "bg-background shadow-sm"
             )}
             onClick={() => setCalendarMode("1-day")}
           >
-            1 Day
+            Day
           </Button>
           <Button
             variant="ghost"
             size="sm"
             className={cn(
-              "h-7 px-3 text-xs",
+              "h-7 px-2 text-xs",
               calendarMode === "3-day" && "bg-background shadow-sm"
             )}
             onClick={() => setCalendarMode("3-day")}
           >
-            3 Days
+            3 Day
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-7 px-2 text-xs",
+              calendarMode === "7-day" && "bg-background shadow-sm"
+            )}
+            onClick={() => setCalendarMode("7-day")}
+          >
+            Week
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-7 px-2 text-xs",
+              calendarMode === "month" && "bg-background shadow-sm"
+            )}
+            onClick={() => setCalendarMode("month")}
+          >
+            Month
           </Button>
         </div>
       </div>
@@ -742,12 +1018,14 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
           <span className="text-sm font-medium">
             {calendarMode === "1-day"
               ? format(visibleDays[0], "EEEE, MMM d")
+              : calendarMode === "month"
+              ? format(currentMonth, "MMMM yyyy")
               : `${format(visibleDays[0], "MMM d")} - ${format(
-                  visibleDays[2],
+                  visibleDays[visibleDays.length - 1],
                   "MMM d"
                 )}`}
           </span>
-          {dayOffset !== 0 && (
+          {(dayOffset !== 0 || monthOffset !== 0) && (
             <Button
               variant="outline"
               size="sm"
@@ -768,14 +1046,14 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
         </Button>
       </div>
 
-      {/* Day headers for multi-day view */}
-      {calendarMode === "3-day" && (
+      {/* Day headers for multi-day view (3-day and 7-day) */}
+      {(calendarMode === "3-day" || calendarMode === "7-day") && (
         <div className="flex border-b border-border">
           <div className="w-14 shrink-0" />
           {visibleDays.map((date) => (
             <div
               key={date.toISOString()}
-              className="flex-1 px-2 py-2 text-center border-l border-border first:border-l-0"
+              className="flex-1 px-1 py-2 text-center border-l border-border first:border-l-0"
             >
               <p
                 className={cn(
@@ -786,278 +1064,219 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
                 {isToday(date) ? "Today" : format(date, "EEE")}
               </p>
               <p className="text-xs text-muted-foreground">
-                {format(date, "MMM d")}
+                {format(date, calendarMode === "7-day" ? "d" : "MMM d")}
               </p>
             </div>
           ))}
         </div>
       )}
 
-      {/* Calendar grid */}
-      <div className="flex-1 overflow-y-auto" ref={containerRef}>
-        {/* Wrapper adds extra scrollable space above and below the grid */}
-        <div
-          className="flex flex-col"
-          style={{
-            minHeight: hours.length * HOUR_HEIGHT + GRID_VERTICAL_PADDING * 2,
-          }}
-        >
-          {/* Top spacer */}
-          <div style={{ height: GRID_VERTICAL_PADDING }} />
+      {/* Month view */}
+      {calendarMode === "month" ? (
+        <MonthView
+          visibleDays={visibleDays}
+          currentMonth={currentMonth}
+          tasks={tasks}
+          outlookEvents={outlookEvents}
+          recurringEvents={recurringEvents}
+          onAddTask={onAddTask}
+          getScheduledTasksForDate={getScheduledTasksForDate}
+          getRecurringEventsForDate={getRecurringEventsForDate}
+        />
+      ) : (
+        /* Calendar grid for day views */
+        <div className="flex-1 overflow-y-auto" ref={containerRef}>
+          {/* Wrapper adds extra scrollable space above and below the grid */}
+          <div
+            className="flex flex-col"
+            style={{
+              minHeight: hours.length * HOUR_HEIGHT + GRID_VERTICAL_PADDING * 2,
+            }}
+          >
+            {/* Top spacer */}
+            <div style={{ height: GRID_VERTICAL_PADDING }} />
 
-          <div className="flex" style={{ height: hours.length * HOUR_HEIGHT }}>
-            {/* Time column */}
-            <div className="w-14 shrink-0 relative">
-              {labelHours.map((hour) => (
-                <div
-                  key={hour}
-                  className="absolute left-0 right-0 border-t border-border"
-                  style={{ top: (hour - START_HOUR) * HOUR_HEIGHT }}
-                >
-                  <span className="text-xs text-muted-foreground pr-2 -mt-2 block text-right">
-                    {format(setHours(new Date(), hour % 24), "h a")}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Day columns */}
-            {visibleDays.map((date, dayIndex) => {
-              const scheduledTasks = getScheduledTasksForDate(date);
-              const currentTimeTop =
-                isToday(date) &&
-                now.getHours() >= START_HOUR &&
-                now.getHours() < END_HOUR
-                  ? (now.getHours() - START_HOUR + now.getMinutes() / 60) *
-                    HOUR_HEIGHT
-                  : null;
-
-              return (
-                <div
-                  key={date.toISOString()}
-                  className={cn(
-                    "flex-1 relative",
-                    dayIndex > 0 && "border-l border-border"
-                  )}
-                  onMouseMove={(e) => {
-                    if (isCreatingEvent || resizingTask) {
-                      handleMouseMove(e, date);
-                    }
-                  }}
-                  onMouseUp={handleMouseUp}
-                  onMouseLeave={() => {
-                    if (resizingTask) {
-                      handleMouseUp();
-                    }
-                  }}
-                >
-                  {/* Hour grid lines */}
-                  {hours.map((hour) => {
-                    return (
-                      <div
-                        key={hour}
-                        className="absolute left-0 right-0 border-t border-border hour-slot cursor-pointer"
-                        style={{
-                          top: (hour - START_HOUR) * HOUR_HEIGHT,
-                          height: HOUR_HEIGHT,
-                        }}
-                        onDragOver={(e) => handleDragOver(e, date, hour)}
-                        onDrop={(e) => handleDrop(e, date, hour)}
-                        onDragLeave={handleDragLeave}
-                        onMouseDown={(e) => {
-                          // Only start creating if not dragging a task
-                          if (e.button === 0 && !e.defaultPrevented) {
-                            handleMouseDown(e, date, hour);
-                          }
-                        }}
-                      />
-                    );
-                  })}
-                  {/* Bottom boundary line so the final 12 AM label has a full-width bar */}
+            <div
+              className="flex"
+              style={{ height: hours.length * HOUR_HEIGHT }}
+            >
+              {/* Time column */}
+              <div className="w-14 shrink-0 relative">
+                {labelHours.map((hour) => (
                   <div
+                    key={hour}
                     className="absolute left-0 right-0 border-t border-border"
-                    style={{ top: (END_HOUR - START_HOUR) * HOUR_HEIGHT }}
-                  />
+                    style={{ top: (hour - START_HOUR) * HOUR_HEIGHT }}
+                  >
+                    <span className="text-xs text-muted-foreground pr-2 -mt-2 block text-right">
+                      {format(setHours(new Date(), hour % 24), "h a")}
+                    </span>
+                  </div>
+                ))}
+              </div>
 
-                  {/* Drag-over highlight showing exact task size */}
-                  {dragOverSlot &&
-                    dragOverSlot.date.getTime() === date.getTime() && (
-                      <div
-                        className="absolute left-1 right-1 rounded bg-primary/20 border-2 border-primary border-dashed pointer-events-none z-30"
-                        style={{
-                          top: dragOverSlot.top,
-                          height: (dragOverSlot.duration / 60) * HOUR_HEIGHT,
-                        }}
-                      >
-                        <div className="p-1 text-xs text-primary font-medium">
-                          Start time
-                        </div>
-                      </div>
+              {/* Day columns */}
+              {visibleDays.map((date, dayIndex) => {
+                const scheduledTasks = getScheduledTasksForDate(date);
+                const currentTimeTop =
+                  isToday(date) &&
+                  now.getHours() >= START_HOUR &&
+                  now.getHours() < END_HOUR
+                    ? (now.getHours() - START_HOUR + now.getMinutes() / 60) *
+                      HOUR_HEIGHT
+                    : null;
+
+                return (
+                  <div
+                    key={date.toISOString()}
+                    className={cn(
+                      "flex-1 relative",
+                      dayIndex > 0 && "border-l border-border"
                     )}
-
-                  {/* Visual indicator for creating event */}
-                  {isCreatingEvent &&
-                    createEventStart &&
-                    createEventEnd &&
-                    createEventStart.date.getTime() === date.getTime() && (
-                      <div
-                        className="absolute left-1 right-1 rounded bg-primary/20 border-2 border-primary border-dashed pointer-events-none z-30"
-                        style={{
-                          top: Math.min(
-                            createEventStart.top,
-                            createEventEnd.top
-                          ),
-                          height: Math.max(
-                            Math.abs(createEventEnd.top - createEventStart.top),
-                            HOUR_HEIGHT / 2
-                          ),
-                        }}
-                      >
-                        <div className="p-1 text-xs text-primary font-medium">
-                          New event
-                        </div>
-                      </div>
-                    )}
-
-                  {/* Current time indicator */}
-                  {currentTimeTop !== null && (
+                    onMouseMove={(e) => {
+                      if (isCreatingEvent || resizingTask) {
+                        handleMouseMove(e, date);
+                      }
+                    }}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={() => {
+                      if (resizingTask) {
+                        handleMouseUp();
+                      }
+                    }}
+                  >
+                    {/* Hour grid lines */}
+                    {hours.map((hour) => {
+                      return (
+                        <div
+                          key={hour}
+                          className="absolute left-0 right-0 border-t border-border hour-slot cursor-pointer"
+                          style={{
+                            top: (hour - START_HOUR) * HOUR_HEIGHT,
+                            height: HOUR_HEIGHT,
+                          }}
+                          onDragOver={(e) => handleDragOver(e, date, hour)}
+                          onDrop={(e) => handleDrop(e, date, hour)}
+                          onDragLeave={handleDragLeave}
+                          onMouseDown={(e) => {
+                            // Only start creating if not dragging a task
+                            if (e.button === 0 && !e.defaultPrevented) {
+                              handleMouseDown(e, date, hour);
+                            }
+                          }}
+                        />
+                      );
+                    })}
+                    {/* Bottom boundary line so the final 12 AM label has a full-width bar */}
                     <div
-                      className="absolute left-0 right-0 flex items-center pointer-events-none z-20"
-                      style={{ top: currentTimeTop }}
-                    >
-                      <div className="w-2 h-2 rounded-full bg-destructive -ml-1" />
-                      <div className="flex-1 h-0.5 bg-destructive" />
-                    </div>
-                  )}
+                      className="absolute left-0 right-0 border-t border-border"
+                      style={{ top: (END_HOUR - START_HOUR) * HOUR_HEIGHT }}
+                    />
 
-                  {/* Outlook events */}
-                  {getOutlookEventsForDate(date).map((event) => {
-                    const pos = getOutlookEventPosition(event);
-                    if (!pos) return null;
-
-                    // Convert event times to user's timezone for display
-                    const eventTimeZone = event.start.timeZone || userTimeZone;
-                    const startDate = toZonedTime(
-                      new Date(event.start.dateTime),
-                      eventTimeZone
-                    );
-                    const endDate = toZonedTime(
-                      new Date(event.end.dateTime),
-                      eventTimeZone
-                    );
-
-                    return (
-                      <ContextMenu key={event.id}>
-                        <ContextMenuTrigger asChild>
-                          <div
-                            className="absolute left-1 right-1 rounded px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-900 dark:text-blue-100 overflow-hidden"
-                            style={{
-                              top: pos.top,
-                              height: Math.max(pos.height, 20),
-                              zIndex: 5,
-                            }}
-                            title={`${event.subject}\n${format(
-                              startDate,
-                              "h:mm a"
-                            )} - ${format(endDate, "h:mm a")}`}
-                          >
-                            <div className="font-medium truncate">
-                              {event.subject}
-                            </div>
-                            <div className="text-[10px] opacity-75">
-                              {format(startDate, "h:mm a")} -{" "}
-                              {format(endDate, "h:mm a")}
-                            </div>
+                    {/* Drag-over highlight showing exact task size */}
+                    {dragOverSlot &&
+                      dragOverSlot.date.getTime() === date.getTime() && (
+                        <div
+                          className="absolute left-1 right-1 rounded bg-primary/20 border-2 border-primary border-dashed pointer-events-none z-30"
+                          style={{
+                            top: dragOverSlot.top,
+                            height: (dragOverSlot.duration / 60) * HOUR_HEIGHT,
+                          }}
+                        >
+                          <div className="p-1 text-xs text-primary font-medium">
+                            Start time
                           </div>
-                        </ContextMenuTrigger>
-                        <ContextMenuContent>
-                          <ContextMenuItem
-                            onClick={async () => {
-                              try {
-                                const response = await fetch(
-                                  `/api/outlook/events/${event.id}`,
-                                  { method: "DELETE" }
-                                );
-                                if (response.ok) {
-                                  await fetchOutlookEvents();
-                                } else {
-                                  const errorData = await response
-                                    .json()
-                                    .catch(() => ({}));
-                                  alert(
-                                    `Failed to delete: ${
-                                      errorData.error || "Unknown error"
-                                    }`
-                                  );
-                                }
-                              } catch (error) {
-                                console.error(
-                                  "Error deleting Outlook event:",
-                                  error
-                                );
-                                alert(
-                                  "Failed to delete event. Please try again."
-                                );
-                              }
-                            }}
-                          >
-                            <Trash2 className="mr-2 h-3.5 w-3.5" />
-                            Delete
-                          </ContextMenuItem>
-                        </ContextMenuContent>
-                      </ContextMenu>
-                    );
-                  })}
+                        </div>
+                      )}
 
-                  {/* Recurring events (orange, translucent, visual placeholder only) */}
-                  {getRecurringEventsForDate(date).map(
-                    ({ event, startTime }) => {
-                      const pos = getTaskPosition(startTime, event.duration);
+                    {/* Visual indicator for creating event */}
+                    {isCreatingEvent &&
+                      createEventStart &&
+                      createEventEnd &&
+                      createEventStart.date.getTime() === date.getTime() && (
+                        <div
+                          className="absolute left-1 right-1 rounded bg-primary/20 border-2 border-primary border-dashed pointer-events-none z-30"
+                          style={{
+                            top: Math.min(
+                              createEventStart.top,
+                              createEventEnd.top
+                            ),
+                            height: Math.max(
+                              Math.abs(
+                                createEventEnd.top - createEventStart.top
+                              ),
+                              HOUR_HEIGHT / 2
+                            ),
+                          }}
+                        >
+                          <div className="p-1 text-xs text-primary font-medium">
+                            New event
+                          </div>
+                        </div>
+                      )}
+
+                    {/* Current time indicator */}
+                    {currentTimeTop !== null && (
+                      <div
+                        className="absolute left-0 right-0 flex items-center pointer-events-none z-20"
+                        style={{ top: currentTimeTop }}
+                      >
+                        <div className="w-2 h-2 rounded-full bg-destructive -ml-1" />
+                        <div className="flex-1 h-0.5 bg-destructive" />
+                      </div>
+                    )}
+
+                    {/* Outlook events */}
+                    {getOutlookEventsForDate(date).map((event) => {
+                      const pos = getOutlookEventPosition(event);
                       if (!pos) return null;
 
+                      // Convert event times to user's timezone for display
+                      const eventTimeZone =
+                        event.start.timeZone || userTimeZone;
+                      const startDate = toZonedTime(
+                        new Date(event.start.dateTime),
+                        eventTimeZone
+                      );
+                      const endDate = toZonedTime(
+                        new Date(event.end.dateTime),
+                        eventTimeZone
+                      );
+
                       return (
-                        <ContextMenu
-                          key={`recurring-${event.id}-${date.toISOString()}`}
-                        >
+                        <ContextMenu key={event.id}>
                           <ContextMenuTrigger asChild>
                             <div
-                              className="absolute left-1 right-1 bg-orange-500/30 dark:bg-orange-600/30 text-orange-900 dark:text-orange-100 rounded-md p-2 shadow-sm"
+                              className="absolute left-1 right-1 rounded px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-900 dark:text-blue-100 overflow-hidden"
                               style={{
-                                top: pos.top + 2,
-                                height: Math.max(pos.height - 4, 24),
-                                zIndex: 1, // Lower z-index so tasks appear on top
+                                top: pos.top,
+                                height: Math.max(pos.height, 20),
+                                zIndex: 5,
                               }}
-                              title={`${event.title} (Recurring placeholder)\n${event.timeOfDay} - ${event.duration} min`}
+                              title={`${event.subject}\n${format(
+                                startDate,
+                                "h:mm a"
+                              )} - ${format(endDate, "h:mm a")}`}
                             >
-                              <div className="flex items-start justify-between gap-1">
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-medium truncate opacity-70">
-                                    {event.title}
-                                  </p>
-                                </div>
+                              <div className="font-medium truncate">
+                                {event.subject}
+                              </div>
+                              <div className="text-[10px] opacity-75">
+                                {format(startDate, "h:mm a")} -{" "}
+                                {format(endDate, "h:mm a")}
                               </div>
                             </div>
                           </ContextMenuTrigger>
                           <ContextMenuContent>
                             <ContextMenuItem
-                              onClick={() => {
-                                setEditingRecurringEvent(event);
-                                setIsRecurringEventFormOpen(true);
-                              }}
-                            >
-                              <Pencil className="mr-2 h-3.5 w-3.5" />
-                              Edit
-                            </ContextMenuItem>
-                            <ContextMenuSeparator />
-                            <ContextMenuItem
                               onClick={async () => {
                                 try {
                                   const response = await fetch(
-                                    `/api/recurring-events/${event.id}`,
+                                    `/api/outlook/events/${event.id}`,
                                     { method: "DELETE" }
                                   );
                                   if (response.ok) {
-                                    await fetchRecurringEvents();
+                                    await fetchOutlookEvents();
                                   } else {
                                     const errorData = await response
                                       .json()
@@ -1070,7 +1289,7 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
                                   }
                                 } catch (error) {
                                   console.error(
-                                    "Error deleting recurring event:",
+                                    "Error deleting Outlook event:",
                                     error
                                   );
                                   alert(
@@ -1085,112 +1304,61 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
                           </ContextMenuContent>
                         </ContextMenu>
                       );
-                    }
-                  )}
+                    })}
 
-                  {/* Scheduled tasks */}
-                  {scheduledTasks.map(({ task, scheduledTime }) => {
-                    // Use resizing state if this task is being resized
-                    const isResizing =
-                      resizingTask?.scheduledTimeId === scheduledTime.id;
-                    const displayStartTime = isResizing
-                      ? resizingTask.startTime
-                      : scheduledTime.startTime;
-                    const displayDuration = isResizing
-                      ? resizingTask.duration
-                      : scheduledTime.duration;
-                    const pos = getTaskPosition(
-                      displayStartTime,
-                      displayDuration
-                    );
-                    if (!pos) return null;
+                    {/* Recurring events (orange, translucent, visual placeholder only) */}
+                    {getRecurringEventsForDate(date).map(
+                      ({ event, startTime }) => {
+                        const pos = getTaskPosition(startTime, event.duration);
+                        if (!pos) return null;
 
-                    return (
-                      <ContextMenu key={`${task.id}-${scheduledTime.id}`}>
-                        <ContextMenuTrigger asChild>
-                          <div
-                            draggable={!isResizing}
-                            onDragStart={(e) => {
-                              // Don't start drag if clicking on resize handle
-                              const target = e.target as HTMLElement;
-                              if (target.classList.contains("resize-handle")) {
-                                e.preventDefault();
-                                return;
-                              }
-                              e.dataTransfer.setData("taskId", task.id);
-                              e.dataTransfer.setData(
-                                "scheduledTimeId",
-                                scheduledTime.id
-                              );
-                              e.dataTransfer.setData("fromCalendar", "true");
-                              e.dataTransfer.effectAllowed = "move";
-                            }}
-                            className="absolute left-1 right-1 bg-primary text-primary-foreground rounded-md p-2 cursor-grab active:cursor-grabbing hover:bg-primary/90 transition-colors shadow-sm group z-10"
-                            style={{
-                              top: pos.top + 2,
-                              height: Math.max(pos.height - 4, 24),
-                              zIndex: 10,
-                            }}
+                        return (
+                          <ContextMenu
+                            key={`recurring-${event.id}-${date.toISOString()}`}
                           >
-                            {/* Top resize handle */}
-                            <div
-                              className="absolute left-0 right-0 top-0 h-2 cursor-ns-resize resize-handle z-20"
-                              onMouseDown={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                const scheduledDate = new Date(
-                                  scheduledTime.startTime
-                                );
-                                setResizingTask({
-                                  taskId: task.id,
-                                  scheduledTimeId: scheduledTime.id,
-                                  startTime: scheduledTime.startTime,
-                                  duration: scheduledTime.duration,
-                                  resizeEdge: "top",
-                                  initialY: 0, // Not used anymore, but kept for type compatibility
-                                  scheduledDate: scheduledDate,
-                                });
-                              }}
-                            />
-
-                            <div className="flex items-start justify-between gap-1">
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs font-medium truncate">
-                                  {task.title}
-                                </p>
+                            <ContextMenuTrigger asChild>
+                              <div
+                                className="absolute left-1 right-1 bg-orange-500/30 dark:bg-orange-600/30 text-orange-900 dark:text-orange-100 rounded-md p-2 shadow-sm"
+                                style={{
+                                  top: pos.top + 2,
+                                  height: Math.max(pos.height - 4, 24),
+                                  zIndex: 1, // Lower z-index so tasks appear on top
+                                }}
+                                title={`${event.title} (Recurring placeholder)\n${event.timeOfDay} - ${event.duration} min`}
+                              >
+                                <div className="flex items-start justify-between gap-1">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-medium truncate opacity-70">
+                                      {event.title}
+                                    </p>
+                                  </div>
+                                </div>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-5 w-5 opacity-70 group-hover:opacity-100 -mr-1 -mt-1 hover:bg-primary-foreground/20 text-primary-foreground shrink-0"
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  e.preventDefault();
-                                  // Delete this specific scheduled time slot
+                            </ContextMenuTrigger>
+                            <ContextMenuContent>
+                              <ContextMenuItem
+                                onClick={() => {
+                                  setEditingRecurringEvent(event);
+                                  setIsRecurringEventFormOpen(true);
+                                }}
+                              >
+                                <Pencil className="mr-2 h-3.5 w-3.5" />
+                                Edit
+                              </ContextMenuItem>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem
+                                onClick={async () => {
                                   try {
                                     const response = await fetch(
-                                      `/api/tasks/${task.id}/scheduled-times/${scheduledTime.id}`,
+                                      `/api/recurring-events/${event.id}`,
                                       { method: "DELETE" }
                                     );
                                     if (response.ok) {
-                                      // Force a refresh to ensure UI updates
-                                      await refreshTasks();
-                                      // Also trigger Outlook events refresh if needed
-                                      if (session?.user) {
-                                        // Small delay to ensure database is updated
-                                        setTimeout(() => {
-                                          refreshTasks();
-                                        }, 100);
-                                      }
+                                      await fetchRecurringEvents();
                                     } else {
                                       const errorData = await response
                                         .json()
                                         .catch(() => ({}));
-                                      console.error(
-                                        "Error deleting scheduled time:",
-                                        response.status,
-                                        errorData
-                                      );
                                       alert(
                                         `Failed to delete: ${
                                           errorData.error || "Unknown error"
@@ -1199,113 +1367,247 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
                                     }
                                   } catch (error) {
                                     console.error(
-                                      "Error deleting scheduled time:",
+                                      "Error deleting recurring event:",
                                       error
                                     );
                                     alert(
-                                      "Failed to delete scheduled time. Please try again."
+                                      "Failed to delete event. Please try again."
                                     );
                                   }
                                 }}
+                              >
+                                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                Delete
+                              </ContextMenuItem>
+                            </ContextMenuContent>
+                          </ContextMenu>
+                        );
+                      }
+                    )}
+
+                    {/* Scheduled tasks */}
+                    {scheduledTasks.map(({ task, scheduledTime }) => {
+                      // Use resizing state if this task is being resized
+                      const isResizing =
+                        resizingTask?.scheduledTimeId === scheduledTime.id;
+                      const displayStartTime = isResizing
+                        ? resizingTask.startTime
+                        : scheduledTime.startTime;
+                      const displayDuration = isResizing
+                        ? resizingTask.duration
+                        : scheduledTime.duration;
+                      const pos = getTaskPosition(
+                        displayStartTime,
+                        displayDuration
+                      );
+                      if (!pos) return null;
+
+                      return (
+                        <ContextMenu key={`${task.id}-${scheduledTime.id}`}>
+                          <ContextMenuTrigger asChild>
+                            <div
+                              draggable={!isResizing}
+                              onDragStart={(e) => {
+                                // Don't start drag if clicking on resize handle
+                                const target = e.target as HTMLElement;
+                                if (
+                                  target.classList.contains("resize-handle")
+                                ) {
+                                  e.preventDefault();
+                                  return;
+                                }
+                                e.dataTransfer.setData("taskId", task.id);
+                                e.dataTransfer.setData(
+                                  "scheduledTimeId",
+                                  scheduledTime.id
+                                );
+                                e.dataTransfer.setData("fromCalendar", "true");
+                                e.dataTransfer.effectAllowed = "move";
+                              }}
+                              className="absolute left-1 right-1 bg-primary text-primary-foreground rounded-md p-2 cursor-grab active:cursor-grabbing hover:bg-primary/90 transition-colors shadow-sm group z-10"
+                              style={{
+                                top: pos.top + 2,
+                                height: Math.max(pos.height - 4, 24),
+                                zIndex: 10,
+                              }}
+                            >
+                              {/* Top resize handle */}
+                              <div
+                                className="absolute left-0 right-0 top-0 h-2 cursor-ns-resize resize-handle z-20"
                                 onMouseDown={(e) => {
                                   e.stopPropagation();
+                                  e.preventDefault();
+                                  const scheduledDate = new Date(
+                                    scheduledTime.startTime
+                                  );
+                                  setResizingTask({
+                                    taskId: task.id,
+                                    scheduledTimeId: scheduledTime.id,
+                                    startTime: scheduledTime.startTime,
+                                    duration: scheduledTime.duration,
+                                    resizeEdge: "top",
+                                    initialY: 0, // Not used anymore, but kept for type compatibility
+                                    scheduledDate: scheduledDate,
+                                  });
                                 }}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
+                              />
 
-                            {/* Bottom resize handle */}
-                            <div
-                              className="absolute left-0 right-0 bottom-0 h-2 cursor-ns-resize resize-handle z-20"
-                              onMouseDown={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                const scheduledDate = new Date(
-                                  scheduledTime.startTime
-                                );
-                                setResizingTask({
-                                  taskId: task.id,
-                                  scheduledTimeId: scheduledTime.id,
-                                  startTime: scheduledTime.startTime,
-                                  duration: scheduledTime.duration,
-                                  resizeEdge: "bottom",
-                                  initialY: 0, // Not used anymore, but kept for type compatibility
-                                  scheduledDate: scheduledDate,
-                                });
-                              }}
-                            />
-                          </div>
-                        </ContextMenuTrigger>
-                        <ContextMenuContent>
-                          <ContextMenuItem
-                            onClick={() => {
-                              if (onAddTask) {
-                                const startDate = new Date(
-                                  scheduledTime.startTime
-                                );
-                                onAddTask(
-                                  startDate,
-                                  scheduledTime.startTime,
-                                  scheduledTime.duration
-                                );
-                              }
-                            }}
-                          >
-                            <Pencil className="mr-2 h-3.5 w-3.5" />
-                            Edit Task
-                          </ContextMenuItem>
-                          <ContextMenuSeparator />
-                          <ContextMenuItem
-                            onClick={async () => {
-                              try {
-                                const response = await fetch(
-                                  `/api/tasks/${task.id}/scheduled-times/${scheduledTime.id}`,
-                                  { method: "DELETE" }
-                                );
-                                if (response.ok) {
-                                  await refreshTasks();
-                                } else {
-                                  const errorData = await response
-                                    .json()
-                                    .catch(() => ({}));
-                                  alert(
-                                    `Failed to delete: ${
-                                      errorData.error || "Unknown error"
-                                    }`
+                              <div className="flex items-start justify-between gap-1">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-medium truncate">
+                                    {task.title}
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-5 w-5 opacity-70 group-hover:opacity-100 -mr-1 -mt-1 hover:bg-primary-foreground/20 text-primary-foreground shrink-0"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    // Delete this specific scheduled time slot
+                                    try {
+                                      const response = await fetch(
+                                        `/api/tasks/${task.id}/scheduled-times/${scheduledTime.id}`,
+                                        { method: "DELETE" }
+                                      );
+                                      if (response.ok) {
+                                        // Force a refresh to ensure UI updates
+                                        await refreshTasks();
+                                        // Also trigger Outlook events refresh if needed
+                                        if (session?.user) {
+                                          // Small delay to ensure database is updated
+                                          setTimeout(() => {
+                                            refreshTasks();
+                                          }, 100);
+                                        }
+                                      } else {
+                                        const errorData = await response
+                                          .json()
+                                          .catch(() => ({}));
+                                        console.error(
+                                          "Error deleting scheduled time:",
+                                          response.status,
+                                          errorData
+                                        );
+                                        alert(
+                                          `Failed to delete: ${
+                                            errorData.error || "Unknown error"
+                                          }`
+                                        );
+                                      }
+                                    } catch (error) {
+                                      console.error(
+                                        "Error deleting scheduled time:",
+                                        error
+                                      );
+                                      alert(
+                                        "Failed to delete scheduled time. Please try again."
+                                      );
+                                    }
+                                  }}
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                  }}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+
+                              {/* Bottom resize handle */}
+                              <div
+                                className="absolute left-0 right-0 bottom-0 h-2 cursor-ns-resize resize-handle z-20"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  const scheduledDate = new Date(
+                                    scheduledTime.startTime
+                                  );
+                                  setResizingTask({
+                                    taskId: task.id,
+                                    scheduledTimeId: scheduledTime.id,
+                                    startTime: scheduledTime.startTime,
+                                    duration: scheduledTime.duration,
+                                    resizeEdge: "bottom",
+                                    initialY: 0, // Not used anymore, but kept for type compatibility
+                                    scheduledDate: scheduledDate,
+                                  });
+                                }}
+                              />
+                            </div>
+                          </ContextMenuTrigger>
+                          <ContextMenuContent>
+                            <ContextMenuItem
+                              onClick={() => {
+                                if (onAddTask) {
+                                  const startDate = new Date(
+                                    scheduledTime.startTime
+                                  );
+                                  onAddTask(
+                                    startDate,
+                                    scheduledTime.startTime,
+                                    scheduledTime.duration
                                   );
                                 }
-                              } catch (error) {
-                                console.error(
-                                  "Error deleting scheduled time:",
-                                  error
-                                );
-                                alert("Failed to delete. Please try again.");
-                              }
-                            }}
-                          >
-                            <Trash2 className="mr-2 h-3.5 w-3.5" />
-                            Delete
-                          </ContextMenuItem>
-                        </ContextMenuContent>
-                      </ContextMenu>
-                    );
-                  })}
-                </div>
-              );
-            })}
+                              }}
+                            >
+                              <Pencil className="mr-2 h-3.5 w-3.5" />
+                              Edit Task
+                            </ContextMenuItem>
+                            <ContextMenuSeparator />
+                            <ContextMenuItem
+                              onClick={async () => {
+                                try {
+                                  const response = await fetch(
+                                    `/api/tasks/${task.id}/scheduled-times/${scheduledTime.id}`,
+                                    { method: "DELETE" }
+                                  );
+                                  if (response.ok) {
+                                    await refreshTasks();
+                                  } else {
+                                    const errorData = await response
+                                      .json()
+                                      .catch(() => ({}));
+                                    alert(
+                                      `Failed to delete: ${
+                                        errorData.error || "Unknown error"
+                                      }`
+                                    );
+                                  }
+                                } catch (error) {
+                                  console.error(
+                                    "Error deleting scheduled time:",
+                                    error
+                                  );
+                                  alert("Failed to delete. Please try again.");
+                                }
+                              }}
+                            >
+                              <Trash2 className="mr-2 h-3.5 w-3.5" />
+                              Delete
+                            </ContextMenuItem>
+                          </ContextMenuContent>
+                        </ContextMenu>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bottom spacer */}
+            <div style={{ height: GRID_VERTICAL_PADDING }} />
           </div>
-
-          {/* Bottom spacer */}
-          <div style={{ height: GRID_VERTICAL_PADDING }} />
         </div>
-      </div>
+      )}
 
-      <div className="p-3 border-t border-border text-center">
-        <p className="text-xs text-muted-foreground">
-          Drag tasks to schedule / Drag back to unschedule
-        </p>
-      </div>
+      {calendarMode !== "month" && (
+        <div className="p-3 border-t border-border text-center">
+          <p className="text-xs text-muted-foreground">
+            Drag tasks to schedule / Drag back to unschedule
+          </p>
+        </div>
+      )}
 
       <RecurringEventForm
         open={isRecurringEventFormOpen}
