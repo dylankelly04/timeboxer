@@ -50,7 +50,9 @@ export async function PUT(
         updateData.completedAt = new Date();
 
         // Create or update task history
-        const today = new Date().toISOString().split("T")[0];
+        // Use the task's due date for the history entry, not today's date
+        // This ensures the activity graph shows work on the correct day
+        const historyDate = existingTask.dueDate; // Already in YYYY-MM-DD format
         const existingHistory = await db
           .select()
           .from(taskHistory)
@@ -61,7 +63,7 @@ export async function PUT(
           await db
             .update(taskHistory)
             .set({
-              date: today,
+              date: historyDate,
               completed: true,
               minutesWorked: existingTask.timeRequired,
             })
@@ -70,7 +72,7 @@ export async function PUT(
           await db.insert(taskHistory).values({
             userId: session.user.id,
             taskId: id,
-            date: today,
+            date: historyDate,
             completed: true,
             minutesWorked: existingTask.timeRequired,
           });

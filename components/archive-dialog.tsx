@@ -114,6 +114,7 @@ export function ArchiveDialog({ open, onOpenChange }: ArchiveDialogProps) {
                           key={task.id}
                           task={task}
                           onEdit={() => {}} // Archive is read-only
+                          isArchived={true}
                         />
                       ))}
                     </div>

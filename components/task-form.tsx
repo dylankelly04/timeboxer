@@ -141,7 +141,14 @@ export function TaskForm({ open, onOpenChange, editingTask }: TaskFormProps) {
                 id="startDate"
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  const newStartDate = e.target.value;
+                  setStartDate(newStartDate);
+                  // If due date is before the new start date, update it to match
+                  if (dueDate < newStartDate) {
+                    setDueDate(newStartDate);
+                  }
+                }}
                 required
               />
             </div>
@@ -153,6 +160,7 @@ export function TaskForm({ open, onOpenChange, editingTask }: TaskFormProps) {
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
+                min={startDate}
                 required
               />
             </div>

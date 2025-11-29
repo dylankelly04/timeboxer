@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type React from "react";
-import { format } from "date-fns";
+import { format, isBefore, isSameDay, startOfDay } from "date-fns";
 import { Clock, Calendar, Trash2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,6 +15,7 @@ interface TaskCardProps {
   onEdit: (task: Task) => void;
   isDragging?: boolean;
   fromDate?: Date;
+  isArchived?: boolean;
 }
 
 export function TaskCard({
@@ -22,9 +23,21 @@ export function TaskCard({
   onEdit,
   isDragging,
   fromDate,
+  isArchived = false,
 }: TaskCardProps) {
   const { updateTask, deleteTask } = useTasks();
   const [showActions, setShowActions] = useState(false);
+
+  // Check if task is archived (completed and due date is today or in the past)
+  const checkIsArchived = () => {
+    if (isArchived) return true;
+    if (!task.completed) return false;
+    const today = startOfDay(new Date());
+    const dueDate = startOfDay(new Date(task.dueDate + "T00:00:00"));
+    return isBefore(dueDate, today) || isSameDay(dueDate, today);
+  };
+
+  const taskIsArchived = checkIsArchived();
 
   const formatDuration = (minutes: number) => {
     if (minutes < 60) return `${minutes}m`;
@@ -45,9 +58,9 @@ export function TaskCard({
   };
 
   const handleDoubleClick = async (e: React.MouseEvent) => {
-    // Don't toggle if clicking on delete button
+    // Don't toggle if clicking on delete button or if archived
     const target = e.target as HTMLElement;
-    if (target.closest('button[type="button"]')) {
+    if (target.closest('button[type="button"]') || taskIsArchived) {
       return;
     }
     e.stopPropagation();
@@ -122,42 +135,45 @@ export function TaskCard({
           </div>
         </div>
 
-        <div
-          className={cn(
-            "flex items-center gap-1 transition-opacity",
-            showActions ? "opacity-100" : "opacity-0"
-          )}
-          onClick={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-green-600 hover:text-green-700 dark:text-green-500 dark:hover:text-green-400"
-            onClick={async (e) => {
-              e.stopPropagation();
-              try {
-                await updateTask(task.id, { completed: !task.completed });
-              } catch (error) {
-                console.error("Failed to update task:", error);
-              }
-            }}
-            title={task.completed ? "Mark as incomplete" : "Mark as complete"}
+        {/* Don't show action buttons for archived tasks */}
+        {!taskIsArchived && (
+          <div
+            className={cn(
+              "flex items-center gap-1 transition-opacity",
+              showActions ? "opacity-100" : "opacity-0"
+            )}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
           >
-            <Check className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-destructive hover:text-destructive"
-            onClick={(e) => {
-              e.stopPropagation();
-              deleteTask(task.id);
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-green-600 hover:text-green-700 dark:text-green-500 dark:hover:text-green-400"
+              onClick={async (e) => {
+                e.stopPropagation();
+                try {
+                  await updateTask(task.id, { completed: !task.completed });
+                } catch (error) {
+                  console.error("Failed to update task:", error);
+                }
+              }}
+              title={task.completed ? "Mark as incomplete" : "Mark as complete"}
+            >
+              <Check className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-destructive hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteTask(task.id);
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
       </div>
     </Card>
   );
