@@ -140,8 +140,7 @@ export function TaskCard({
   return (
     <Card
       className={cn(
-        "group relative px-3 pt-3 transition-all duration-200 cursor-pointer overflow-hidden",
-        hasProgress ? "pb-0" : "pb-3",
+        "group relative px-3! pt-3! pb-0! gap-0! transition-all duration-200 cursor-pointer",
         "hover:shadow-md hover:border-primary/30",
         isDragging && "opacity-50 shadow-lg rotate-2",
         task.completed && "opacity-60",
@@ -279,9 +278,9 @@ export function TaskCard({
         )}
       </div>
 
-      {/* Progress bar for tasks with completed time - full width, flush to bottom */}
+      {/* Progress bar for tasks with completed time - full width */}
       {hasProgress && (
-        <div className="mt-2 h-1.5 bg-muted/50">
+        <div className="mt-0.5 h-1 bg-muted rounded-full overflow-hidden">
           <div
             className="h-full bg-green-500 transition-all duration-300"
             style={{ width: `${progressPercent}%` }}
