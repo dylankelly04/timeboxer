@@ -389,34 +389,9 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
 
-    // Determine the correct duration for the dragged item based on source data
-    const taskId = e.dataTransfer.getData("taskId");
-    const scheduledTimeId = e.dataTransfer.getData("scheduledTimeId");
-
-    let taskDuration = 30; // sensible default
-
-    if (taskId) {
-      const task = tasks.find((t) => t.id === taskId);
-      if (task) {
-        // If dragging an existing scheduled slot from the calendar, prefer that slot's duration
-        if (
-          scheduledTimeId &&
-          scheduledTimeId !== "undefined" &&
-          task.scheduledTimes &&
-          task.scheduledTimes.length > 0
-        ) {
-          const scheduledTime = task.scheduledTimes.find(
-            (st) => st.id === scheduledTimeId
-          );
-          if (scheduledTime) {
-            taskDuration = scheduledTime.duration;
-          }
-        } else {
-          // Otherwise use the task's estimated timeRequired
-          taskDuration = task.timeRequired || 30;
-        }
-      }
-    }
+    // Get the task duration from drag data (set during dragStart)
+    const taskDurationStr = e.dataTransfer.getData("taskDuration");
+    const taskDuration = taskDurationStr ? parseInt(taskDurationStr, 10) : 30;
 
     // Calculate exact drop position to show accurate highlight
     const hourSlot = e.currentTarget as HTMLElement;
@@ -915,11 +890,7 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
                         }}
                       >
                         <div className="p-1 text-xs text-primary font-medium">
-                          {dragOverSlot.duration < 60
-                            ? `${dragOverSlot.duration}m`
-                            : `${Math.floor(dragOverSlot.duration / 60)}h ${
-                                dragOverSlot.duration % 60
-                              }m`}
+                          Start time
                         </div>
                       </div>
                     )}
@@ -1147,11 +1118,6 @@ export function CalendarView({ onAddTask }: CalendarViewProps = {}) {
                                 return;
                               }
                               e.dataTransfer.setData("taskId", task.id);
-                              // Provide duration so drag-over highlight matches this slot's length
-                              e.dataTransfer.setData(
-                                "taskDuration",
-                                displayDuration.toString()
-                              );
                               e.dataTransfer.setData(
                                 "scheduledTimeId",
                                 scheduledTime.id
