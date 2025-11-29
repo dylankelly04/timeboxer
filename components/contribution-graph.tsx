@@ -64,7 +64,9 @@ export function ContributionGraph({
     } else if (mins === 0) {
       return `${hours} hour${hours !== 1 ? "s" : ""}`;
     } else {
-      return `${hours} hour${hours !== 1 ? "s" : ""} ${mins} minute${mins !== 1 ? "s" : ""}`;
+      return `${hours} hour${hours !== 1 ? "s" : ""} ${mins} minute${
+        mins !== 1 ? "s" : ""
+      }`;
     }
   };
 
@@ -182,7 +184,9 @@ export function ContributionGraph({
                       "bg-green-300 dark:bg-green-600 border-green-200/30 dark:border-green-400/30", // 8-10 hours
                     intensity === 6 &&
                       "bg-green-200 dark:bg-green-500 border-green-100/30 dark:border-green-300/30", // 10-12+ hours
-                    isToday && "bg-zinc-500/40 dark:bg-zinc-400/40 border-zinc-400/60 dark:border-zinc-300/60"
+                    // Today should keep its intensity color, but have a subtle neutral outline
+                    isToday &&
+                      "ring-[1.5px] ring-zinc-400/70 dark:ring-zinc-200/70 ring-offset-0"
                   )}
                   onMouseEnter={() => setHoveredDate(date)}
                   onMouseLeave={() => setHoveredDate(null)}
@@ -213,11 +217,14 @@ export function ContributionGraph({
       <div className="text-center text-sm text-muted-foreground pt-2 border-t min-h-[24px]">
         {hoveredDate ? (
           <>
-            Hours worked on {format(new Date(hoveredDate + "T00:00:00"), "MMM dd, yyyy")}:{" "}
+            Hours worked on{" "}
+            {format(new Date(hoveredDate + "T00:00:00"), "MMM dd, yyyy")}:{" "}
             {formatHoursWorked(minutesPerDay[hoveredDate] || 0)}
           </>
         ) : (
-          <span className="opacity-50">Hover to see how much you worked on each day</span>
+          <span className="opacity-50">
+            Hover to see how much you worked on each day
+          </span>
         )}
       </div>
     </div>
