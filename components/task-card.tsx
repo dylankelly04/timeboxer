@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type React from "react";
-import { format, isBefore, isSameDay, startOfDay } from "date-fns";
-import { Clock, Calendar, Trash2, Check, Plus } from "lucide-react";
+import { format, isBefore, isSameDay, startOfDay, addMinutes } from "date-fns";
+import { Clock, Calendar, Trash2, Check, Plus, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -48,7 +48,38 @@ export function TaskCard({
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   };
 
-  const isScheduled = !!task.scheduledTime;
+  // Calculate completed time based on scheduled time blocks that have already passed
+  const completedMinutes = useMemo(() => {
+    if (!task.scheduledTimes || task.scheduledTimes.length === 0) {
+      return 0;
+    }
+
+    const now = new Date();
+    let completed = 0;
+
+    for (const st of task.scheduledTimes) {
+      const startTime = new Date(st.startTime);
+      const endTime = addMinutes(startTime, st.duration);
+
+      if (endTime <= now) {
+        // Entire block has passed
+        completed += st.duration;
+      } else if (startTime < now) {
+        // Block is in progress - count the elapsed portion
+        const elapsedMinutes = Math.floor((now.getTime() - startTime.getTime()) / (1000 * 60));
+        completed += Math.min(elapsedMinutes, st.duration);
+      }
+      // If startTime >= now, block hasn't started yet, don't count it
+    }
+
+    return completed;
+  }, [task.scheduledTimes]);
+
+  const hasProgress = completedMinutes > 0 && !task.completed;
+  const progressPercent = task.timeRequired > 0 ? Math.min(100, Math.round((completedMinutes / task.timeRequired) * 100)) : 0;
+
+  // Check if task has any scheduled time (either old field or new array)
+  const isScheduled = !!task.scheduledTime || (task.scheduledTimes && task.scheduledTimes.length > 0);
 
   const handleCardClick = (e: React.MouseEvent) => {
     // Don't open edit if clicking on delete button
@@ -129,13 +160,33 @@ export function TaskCard({
           <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground whitespace-nowrap">
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {formatDuration(task.timeRequired)}
+              {hasProgress ? (
+                <span className="flex items-center gap-1">
+                  <span className="text-green-600 dark:text-green-500 font-medium">
+                    {formatDuration(completedMinutes)}
+                  </span>
+                  <span className="text-muted-foreground/60">/</span>
+                  <span>{formatDuration(task.timeRequired)}</span>
+                </span>
+              ) : (
+                formatDuration(task.timeRequired)
+              )}
             </span>
             <span className="flex items-center gap-1 whitespace-nowrap">
               <Calendar className="h-3 w-3" />
               {format(new Date(task.dueDate + "T00:00:00"), "MMM d")}
             </span>
           </div>
+
+          {/* Progress bar for tasks with completed time */}
+          {hasProgress && (
+            <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-green-500 transition-all duration-300"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Don't show action buttons for archived tasks */}

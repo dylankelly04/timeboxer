@@ -51,19 +51,19 @@ export const taskHistory = sqliteTable(
       .references(() => users.id, { onDelete: "cascade" }),
     taskId: text("taskId")
       .notNull()
-      .unique()
       .references(() => tasks.id, { onDelete: "cascade" }),
-    date: text("date").notNull(), // ISO date string (YYYY-MM-DD)
+    date: text("date").notNull(), // ISO date string (YYYY-MM-DD) - the day work was done
     completed: integer("completed", { mode: "boolean" })
       .notNull()
       .default(false),
-    minutesWorked: integer("minutesWorked").notNull().default(0), // Minutes worked on this task
+    minutesWorked: integer("minutesWorked").notNull().default(0), // Minutes worked on this task on this specific date
     createdAt: integer("createdAt", { mode: "timestamp" })
       .notNull()
       .$defaultFn(() => new Date()),
   },
   (table) => ({
     userIdDateIdx: index("userIdDateIdx").on(table.userId, table.date),
+    taskIdDateIdx: index("taskIdDateIdx").on(table.taskId, table.date), // For looking up history by task and date
   })
 );
 

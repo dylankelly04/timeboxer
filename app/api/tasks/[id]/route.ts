@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { tasks, taskHistory } from "@/drizzle/schema";
+import { tasks, taskHistory, taskScheduledTimes } from "@/drizzle/schema";
 import { eq, and } from "drizzle-orm";
 
 // PUT /api/tasks/[id] - Update a task
@@ -49,37 +49,52 @@ export async function PUT(
       if (body.completed) {
         updateData.completedAt = new Date();
 
-        // Create or update task history
-        // Use the task's due date for the history entry, not today's date
-        // This ensures the activity graph shows work on the correct day
-        const historyDate = existingTask.dueDate; // Already in YYYY-MM-DD format
-        const existingHistory = await db
+        // Get all scheduled time slots for this task
+        const scheduledTimes = await db
           .select()
-          .from(taskHistory)
-          .where(eq(taskHistory.taskId, id))
-          .limit(1);
+          .from(taskScheduledTimes)
+          .where(eq(taskScheduledTimes.taskId, id));
 
-        if (existingHistory[0]) {
-          await db
-            .update(taskHistory)
-            .set({
-              date: historyDate,
+        // Delete any existing history entries for this task (we'll recreate them)
+        await db.delete(taskHistory).where(eq(taskHistory.taskId, id));
+
+        if (scheduledTimes.length > 0) {
+          // Group scheduled times by date and sum minutes for each day
+          const minutesByDate: Record<string, number> = {};
+
+          for (const st of scheduledTimes) {
+            // Extract date from startTime (ISO datetime string)
+            const date = st.startTime.split("T")[0]; // Get YYYY-MM-DD part
+            if (!minutesByDate[date]) {
+              minutesByDate[date] = 0;
+            }
+            minutesByDate[date] += st.duration;
+          }
+
+          // Create a history entry for each day with scheduled work
+          for (const [date, minutes] of Object.entries(minutesByDate)) {
+            await db.insert(taskHistory).values({
+              userId: session.user.id,
+              taskId: id,
+              date: date,
               completed: true,
-              minutesWorked: existingTask.timeRequired,
-            })
-            .where(eq(taskHistory.taskId, id));
+              minutesWorked: minutes,
+            });
+          }
         } else {
+          // No scheduled times - use the task's due date and total timeRequired
+          // This handles tasks that were completed without being scheduled on the calendar
           await db.insert(taskHistory).values({
             userId: session.user.id,
             taskId: id,
-            date: historyDate,
+            date: existingTask.dueDate,
             completed: true,
             minutesWorked: existingTask.timeRequired,
           });
         }
       } else {
         updateData.completedAt = null;
-        // Remove from task history if uncompleted
+        // Remove all history entries for this task if uncompleted
         await db.delete(taskHistory).where(eq(taskHistory.taskId, id));
       }
     }
