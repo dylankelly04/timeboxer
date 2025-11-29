@@ -111,18 +111,26 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const existingUser = existingUsers[0] || null;
 
           if (!existingUser) {
-            await db.insert(users).values({
+            const [newUser] = await db.insert(users).values({
               email: user.email,
               name: user.name || user.email.split("@")[0],
               image: user.image || null,
               password: null, // OAuth users don't have passwords
-            });
-          } else if (!existingUser.image && user.image) {
+            }).returning();
+            // Update the user object with the database ID so it's used in JWT
+            if (newUser) {
+              user.id = newUser.id;
+            }
+          } else {
             // Update image if user exists but doesn't have one
-            await db
-              .update(users)
-              .set({ image: user.image })
-              .where(eq(users.id, existingUser.id));
+            if (!existingUser.image && user.image) {
+              await db
+                .update(users)
+                .set({ image: user.image })
+                .where(eq(users.id, existingUser.id));
+            }
+            // Use the database user ID, not NextAuth's generated ID
+            user.id = existingUser.id;
           }
         } catch (error) {
           console.error("Database error in Google sign in:", error);

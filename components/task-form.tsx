@@ -3,6 +3,7 @@
 import type React from "react";
 
 import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import type { Task } from "@/lib/types";
 import { useTasks } from "@/lib/task-context";
+import { SignUpDialog } from "./signup-dialog";
 
 interface TaskFormProps {
   open: boolean;
@@ -31,7 +33,9 @@ interface TaskFormProps {
 }
 
 export function TaskForm({ open, onOpenChange, editingTask }: TaskFormProps) {
+  const { data: session } = useSession();
   const { addTask, updateTask } = useTasks();
+  const [showSignUp, setShowSignUp] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -59,6 +63,12 @@ export function TaskForm({ open, onOpenChange, editingTask }: TaskFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Check if user is authenticated
+    if (!session?.user) {
+      setShowSignUp(true);
+      return;
+    }
 
     const taskData = {
       title,
@@ -89,16 +99,17 @@ export function TaskForm({ open, onOpenChange, editingTask }: TaskFormProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{editingTask ? "Edit Task" : "New Task"}</DialogTitle>
-          <DialogDescription>
-            {editingTask
-              ? "Update your task details"
-              : "Create a new task to track your work"}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingTask ? "Edit Task" : "New Task"}</DialogTitle>
+            <DialogDescription>
+              {editingTask
+                ? "Update your task details"
+                : "Create a new task to track your work"}
+            </DialogDescription>
+          </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -181,5 +192,14 @@ export function TaskForm({ open, onOpenChange, editingTask }: TaskFormProps) {
         </form>
       </DialogContent>
     </Dialog>
+    <SignUpDialog
+      open={showSignUp}
+      onOpenChange={setShowSignUp}
+      onSuccess={() => {
+        // After successful sign up, retry the form submission
+        // The form will still be open, user can click submit again
+      }}
+    />
+    </>
   );
 }

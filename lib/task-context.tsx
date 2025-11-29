@@ -11,6 +11,20 @@ import {
 import { format } from "date-fns";
 import { useSession } from "next-auth/react";
 import type { Task } from "./types";
+import { SignUpDialog } from "@/components/signup-dialog";
+
+// Context for triggering sign-up dialog
+const SignUpContext = createContext<{
+  triggerSignUp: () => void;
+} | null>(null);
+
+export function useSignUp() {
+  const context = useContext(SignUpContext);
+  if (!context) {
+    throw new Error("useSignUp must be used within SignUpProvider");
+  }
+  return context;
+}
 
 interface TaskContextType {
   tasks: Task[];
@@ -22,6 +36,7 @@ interface TaskContextType {
   unscheduleTask: (taskId: string) => Promise<void>;
   moveTaskToDate: (taskId: string, newDate: Date) => Promise<void>;
   refreshTasks: () => Promise<void>;
+  requireAuth: () => boolean; // Returns true if authenticated, false if needs sign up
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
@@ -30,6 +45,15 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   const { data: session } = useSession();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSignUp, setShowSignUp] = useState(false);
+
+  const requireAuth = useCallback(() => {
+    if (!session?.user) {
+      setShowSignUp(true);
+      return false;
+    }
+    return true;
+  }, [session]);
 
   // Fetch tasks from API
   const fetchTasks = useCallback(async () => {
@@ -63,8 +87,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
 
   const addTask = useCallback(
     async (task: Omit<Task, "id">) => {
-      if (!session?.user?.id) {
-        console.error("Cannot add task: User not authenticated");
+      if (!requireAuth()) {
         throw new Error("User must be logged in to create tasks");
       }
 
@@ -112,10 +135,13 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         throw error;
       }
     },
-    [session]
+    [session, requireAuth]
   );
 
   const updateTask = useCallback(async (id: string, updates: Partial<Task>) => {
+    if (!requireAuth()) {
+      throw new Error("User must be logged in to update tasks");
+    }
     try {
       // Check if task was previously scheduled to determine if this is create or update
       const existingTask = tasks.find((t) => t.id === id);
@@ -154,9 +180,12 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       console.error("Error updating task:", error);
       throw error;
     }
-  }, [tasks]);
+  }, [tasks, requireAuth]);
 
   const deleteTask = useCallback(async (id: string) => {
+    if (!requireAuth()) {
+      throw new Error("User must be logged in to delete tasks");
+    }
     try {
       // Check if task is scheduled before deleting
       const task = tasks.find((t) => t.id === id);
@@ -189,7 +218,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       console.error("Error deleting task:", error);
       throw error;
     }
-  }, [tasks]);
+  }, [tasks, requireAuth]);
 
   const scheduleTask = useCallback(
     async (taskId: string, scheduledTime: string) => {
@@ -229,9 +258,19 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         unscheduleTask,
         moveTaskToDate,
         refreshTasks: fetchTasks,
+        requireAuth,
       }}
     >
-      {children}
+      <SignUpContext.Provider value={{ triggerSignUp: () => setShowSignUp(true) }}>
+        {children}
+        <SignUpDialog
+          open={showSignUp}
+          onOpenChange={setShowSignUp}
+          onSuccess={() => {
+            setShowSignUp(false);
+          }}
+        />
+      </SignUpContext.Provider>
     </TaskContext.Provider>
   );
 }
