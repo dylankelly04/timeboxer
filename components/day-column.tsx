@@ -21,6 +21,7 @@ import { useTasks } from "@/lib/task-context";
 interface DayColumnProps {
   date: Date;
   tasks: Task[];
+  rolloverTasks?: Task[];
   reminders?: Reminder[];
   onAddTask: (date: Date) => void;
   onEditTask: (task: Task) => void;
@@ -30,6 +31,7 @@ interface DayColumnProps {
 export function DayColumn({
   date,
   tasks,
+  rolloverTasks = [],
   reminders = [],
   onAddTask,
   onEditTask,
@@ -115,11 +117,13 @@ export function DayColumn({
             <p className="text-xs font-medium text-muted-foreground">
               {scheduledTasks.length +
                 pendingTasks.length +
-                completedTasks.length}{" "}
+                completedTasks.length +
+                rolloverTasks.length}{" "}
               task
               {scheduledTasks.length +
                 pendingTasks.length +
-                completedTasks.length !==
+                completedTasks.length +
+                rolloverTasks.length !==
               1
                 ? "s"
                 : ""}
@@ -135,6 +139,24 @@ export function DayColumn({
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-3">
+        {/* Rollover tasks - tasks from previous days that weren't completed */}
+        {rolloverTasks.length > 0 && (
+          <div className="space-y-2">
+            <div className="px-1 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+              Rollover ({rolloverTasks.length})
+            </div>
+            {rolloverTasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onEdit={onEditTask}
+                fromDate={date}
+                isRollover
+              />
+            ))}
+          </div>
+        )}
+
         {/* Scheduled tasks */}
         {scheduledTasks.length > 0 && (
           <div className="space-y-2">
@@ -188,7 +210,8 @@ export function DayColumn({
 
         {scheduledTasks.length === 0 &&
           pendingTasks.length === 0 &&
-          completedTasks.length === 0 && (
+          completedTasks.length === 0 &&
+          rolloverTasks.length === 0 && (
             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
               <p className="text-xs">No tasks</p>
             </div>

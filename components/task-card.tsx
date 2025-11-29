@@ -16,6 +16,7 @@ interface TaskCardProps {
   isDragging?: boolean;
   fromDate?: Date;
   isArchived?: boolean;
+  isRollover?: boolean;
 }
 
 export function TaskCard({
@@ -24,6 +25,7 @@ export function TaskCard({
   isDragging,
   fromDate,
   isArchived = false,
+  isRollover = false,
 }: TaskCardProps) {
   const { updateTask, deleteTask } = useTasks();
   const [showActions, setShowActions] = useState(false);
@@ -97,7 +99,8 @@ export function TaskCard({
         "hover:shadow-md hover:border-primary/30",
         isDragging && "opacity-50 shadow-lg rotate-2",
         task.completed && "opacity-60",
-        isScheduled && "border-l-4 border-l-accent"
+        isScheduled && "border-l-4 border-l-accent",
+        isRollover && "border-l-4 border-l-amber-500 bg-amber-500/5"
       )}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}

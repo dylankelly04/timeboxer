@@ -88,6 +88,35 @@ export function TaskListView({ onAddTask, onEditTask, width }: TaskListViewProps
     return tasks.filter((task) => task.startDate === dateStr)
   }
 
+  // Get rollover tasks for a specific date
+  // Rollover tasks are incomplete tasks from previous days that should appear on the current/future day
+  const getRolloverTasksForDate = (date: Date) => {
+    const dateStr = format(date, "yyyy-MM-dd")
+    const dateStart = startOfDay(date)
+
+    // Only show rollovers for today or future dates
+    if (isBefore(dateStart, today)) {
+      return []
+    }
+
+    // For today, get all incomplete tasks from previous days
+    // For future days, don't show rollovers (they'll appear on their original date or today)
+    if (!isSameDay(dateStart, today)) {
+      return []
+    }
+
+    return tasks.filter((task) => {
+      // Must be incomplete
+      if (task.completed) return false
+
+      // Must be from a previous day (startDate before today)
+      const taskStartDate = new Date(task.startDate + "T00:00:00")
+      const taskStartDateStart = startOfDay(taskStartDate)
+
+      return isBefore(taskStartDateStart, today)
+    })
+  }
+
   // For "all" view: categorize tasks
   // Exclude completed tasks whose due date is today or in the past (they go to archive)
   const isArchivedTask = (task: Task) => {
@@ -97,9 +126,23 @@ export function TaskListView({ onAddTask, onEditTask, width }: TaskListViewProps
     return isBefore(dueDateStart, today) || isSameDay(dueDateStart, today)
   }
 
+  // Get all rollover tasks (incomplete tasks from previous days) for "all" view
+  const rolloverTasks = tasks.filter((task) => {
+    if (task.completed) return false
+    const taskStartDate = new Date(task.startDate + "T00:00:00")
+    const taskStartDateStart = startOfDay(taskStartDate)
+    return isBefore(taskStartDateStart, today)
+  })
+
   const hasScheduledTime = (t: Task) => t.scheduledTime || (t.scheduledTimes && t.scheduledTimes.length > 0)
-  const scheduledTasks = tasks.filter((t) => hasScheduledTime(t) && !t.completed)
-  const pendingTasks = tasks.filter((t) => !hasScheduledTime(t) && !t.completed)
+  // Exclude rollover tasks from scheduled/pending (they'll be shown separately)
+  const isRolloverTask = (t: Task) => {
+    const taskStartDate = new Date(t.startDate + "T00:00:00")
+    const taskStartDateStart = startOfDay(taskStartDate)
+    return isBefore(taskStartDateStart, today)
+  }
+  const scheduledTasks = tasks.filter((t) => hasScheduledTime(t) && !t.completed && !isRolloverTask(t))
+  const pendingTasks = tasks.filter((t) => !hasScheduledTime(t) && !t.completed && !isRolloverTask(t))
   const completedTasks = tasks.filter((t) => t.completed && !isArchivedTask(t))
 
   const goToPreviousDays = () => setDayOffset((prev) => prev - 3)
@@ -163,6 +206,7 @@ export function TaskListView({ onAddTask, onEditTask, width }: TaskListViewProps
           scheduledTasks={scheduledTasks}
           pendingTasks={pendingTasks}
           completedTasks={completedTasks}
+          rolloverTasks={rolloverTasks}
           reminders={reminders}
           onAddTask={() => onAddTask()}
           onEditTask={onEditTask}
@@ -175,6 +219,7 @@ export function TaskListView({ onAddTask, onEditTask, width }: TaskListViewProps
               key={date.toISOString()}
               date={date}
               tasks={getTasksForDate(date)}
+              rolloverTasks={getRolloverTasksForDate(date)}
               reminders={getRemindersForDate(date)}
               onAddTask={onAddTask}
               onEditTask={onEditTask}
@@ -201,13 +246,14 @@ interface AllTasksViewProps {
   scheduledTasks: Task[]
   pendingTasks: Task[]
   completedTasks: Task[]
+  rolloverTasks: Task[]
   reminders: Reminder[]
   onAddTask: () => void
   onEditTask: (task: Task) => void
   onEditReminder: (reminder: Reminder) => void
 }
 
-function AllTasksView({ scheduledTasks, pendingTasks, completedTasks, reminders, onAddTask, onEditTask, onEditReminder }: AllTasksViewProps) {
+function AllTasksView({ scheduledTasks, pendingTasks, completedTasks, rolloverTasks, reminders, onAddTask, onEditTask, onEditReminder }: AllTasksViewProps) {
   const { unscheduleTask } = useTasks()
 
   // Get today's reminders for the "All Tasks" view
@@ -228,22 +274,25 @@ function AllTasksView({ scheduledTasks, pendingTasks, completedTasks, reminders,
     }
   }
 
-  const TaskSection = ({ title, tasks, emptyMessage }: { title: string; tasks: Task[]; emptyMessage: string }) => {
+  const TaskSection = ({ title, tasks, emptyMessage, isRollover = false }: { title: string; tasks: Task[]; emptyMessage: string; isRollover?: boolean }) => {
     if (tasks.length === 0) return null
 
     return (
       <div className="space-y-2">
-        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+        <div className={cn(
+          "px-2 py-1 text-xs font-semibold uppercase tracking-wide",
+          isRollover ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"
+        )}>
           {title} ({tasks.length})
         </div>
         {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onEdit={onEditTask} />
+          <TaskCard key={task.id} task={task} onEdit={onEditTask} isRollover={isRollover} />
         ))}
       </div>
     )
   }
 
-  const totalTasks = scheduledTasks.length + pendingTasks.length + completedTasks.length
+  const totalTasks = scheduledTasks.length + pendingTasks.length + completedTasks.length + rolloverTasks.length
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" onDragOver={handleDragOver} onDrop={handleDrop}>
@@ -251,6 +300,7 @@ function AllTasksView({ scheduledTasks, pendingTasks, completedTasks, reminders,
         {totalTasks} task{totalTasks !== 1 ? "s" : ""}
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
+        <TaskSection title="Rollover" tasks={rolloverTasks} emptyMessage="No rollover tasks" isRollover />
         <TaskSection title="Scheduled" tasks={scheduledTasks} emptyMessage="No scheduled tasks" />
         <TaskSection title="Pending" tasks={pendingTasks} emptyMessage="No pending tasks" />
         <TaskSection title="Completed" tasks={completedTasks} emptyMessage="No completed tasks" />
