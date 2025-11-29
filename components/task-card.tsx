@@ -280,7 +280,7 @@ export function TaskCard({
 
       {/* Progress bar for tasks with completed time - full width */}
       {hasProgress && (
-        <div className="mt-0.5 h-1 bg-muted rounded-full overflow-hidden">
+        <div className="m-1 h-1 bg-muted rounded-full overflow-hidden">
           <div
             className="h-full bg-green-500 transition-all duration-300"
             style={{ width: `${progressPercent}%` }}
