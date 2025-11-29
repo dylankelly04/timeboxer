@@ -3,7 +3,14 @@
 import { useState, useMemo } from "react";
 import type React from "react";
 import { format, isBefore, isSameDay, startOfDay, addMinutes } from "date-fns";
-import { Clock, Calendar, Trash2, Check, Plus, CheckCircle2 } from "lucide-react";
+import {
+  Clock,
+  Calendar,
+  Trash2,
+  Check,
+  Plus,
+  CheckCircle2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -66,7 +73,9 @@ export function TaskCard({
         completed += st.duration;
       } else if (startTime < now) {
         // Block is in progress - count the elapsed portion
-        const elapsedMinutes = Math.floor((now.getTime() - startTime.getTime()) / (1000 * 60));
+        const elapsedMinutes = Math.floor(
+          (now.getTime() - startTime.getTime()) / (1000 * 60)
+        );
         completed += Math.min(elapsedMinutes, st.duration);
       }
       // If startTime >= now, block hasn't started yet, don't count it
@@ -76,10 +85,15 @@ export function TaskCard({
   }, [task.scheduledTimes]);
 
   const hasProgress = completedMinutes > 0 && !task.completed;
-  const progressPercent = task.timeRequired > 0 ? Math.min(100, Math.round((completedMinutes / task.timeRequired) * 100)) : 0;
+  const progressPercent =
+    task.timeRequired > 0
+      ? Math.min(100, Math.round((completedMinutes / task.timeRequired) * 100))
+      : 0;
 
   // Check if task has any scheduled time (either old field or new array)
-  const isScheduled = !!task.scheduledTime || (task.scheduledTimes && task.scheduledTimes.length > 0);
+  const isScheduled =
+    !!task.scheduledTime ||
+    (task.scheduledTimes && task.scheduledTimes.length > 0);
 
   const handleCardClick = (e: React.MouseEvent) => {
     // Don't open edit if clicking on delete button
@@ -177,7 +191,6 @@ export function TaskCard({
               {format(new Date(task.dueDate + "T00:00:00"), "MMM d")}
             </span>
           </div>
-
         </div>
 
         {/* Don't show action buttons for archived tasks */}
@@ -241,7 +254,9 @@ export function TaskCard({
                       console.error("Failed to update task:", error);
                     }
                   }}
-                  title={task.completed ? "Mark as incomplete" : "Mark as complete"}
+                  title={
+                    task.completed ? "Mark as incomplete" : "Mark as complete"
+                  }
                 >
                   <Check className="h-3.5 w-3.5" />
                 </Button>
