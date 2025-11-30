@@ -255,85 +255,124 @@ function MonthView({
 
                   {/* Task/Event indicators */}
                   <div className="flex-1 space-y-0.5 overflow-hidden">
-                    {/* Reminders */}
-                    {dayReminders.slice(0, 1).map((reminder) => (
-                      <div
-                        key={reminder.id}
-                        className="text-[10px] px-1 py-0.5 rounded bg-red-500/30 text-red-600 dark:text-red-400 truncate"
-                        title={reminder.text}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {reminder.text}
-                      </div>
-                    ))}
+                    {(() => {
+                      // Combine all items into a single array with type info, then show up to 3
+                      const MAX_ITEMS = 3;
+                      const allItems: Array<{
+                        type: string;
+                        key: string;
+                        element: React.ReactNode;
+                      }> = [];
 
-                    {/* Scheduled tasks */}
-                    {scheduledTasks
-                      .slice(0, 2 - dayReminders.length)
-                      .map(({ task, scheduledTime }) => (
-                        <div
-                          key={scheduledTime.id}
-                          className="text-[10px] px-1 py-0.5 rounded bg-primary/20 text-primary truncate"
-                          title={task.title}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {task.title}
-                        </div>
-                      ))}
+                      // Add Outlook events first (external calendar events are typically more important)
+                      dayOutlookEvents.forEach((event) => {
+                        allItems.push({
+                          type: "outlook",
+                          key: `outlook-${event.id}`,
+                          element: (
+                            <div
+                              key={`outlook-${event.id}`}
+                              className="text-[10px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-600 dark:text-blue-400 truncate"
+                              title={event.subject}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {event.subject}
+                            </div>
+                          ),
+                        });
+                      });
 
-                    {/* Unscheduled tasks */}
-                    {dayTasks
-                      .filter(
-                        (t) => !scheduledTasks.some((st) => st.task.id === t.id)
-                      )
-                      .slice(
-                        0,
-                        Math.max(
-                          0,
-                          2 - scheduledTasks.length - dayReminders.length
+                      // Add scheduled tasks
+                      scheduledTasks.forEach(({ task, scheduledTime }) => {
+                        allItems.push({
+                          type: "scheduled",
+                          key: `scheduled-${scheduledTime.id}`,
+                          element: (
+                            <div
+                              key={`scheduled-${scheduledTime.id}`}
+                              className="text-[10px] px-1 py-0.5 rounded bg-primary/20 text-primary truncate"
+                              title={task.title}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {task.title}
+                            </div>
+                          ),
+                        });
+                      });
+
+                      // Add reminders
+                      dayReminders.forEach((reminder) => {
+                        allItems.push({
+                          type: "reminder",
+                          key: `reminder-${reminder.id}`,
+                          element: (
+                            <div
+                              key={`reminder-${reminder.id}`}
+                              className="text-[10px] px-1 py-0.5 rounded bg-red-500/30 text-red-600 dark:text-red-400 truncate"
+                              title={reminder.text}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {reminder.text}
+                            </div>
+                          ),
+                        });
+                      });
+
+                      // Add recurring events
+                      dayRecurringEvents.forEach(({ event }) => {
+                        allItems.push({
+                          type: "recurring",
+                          key: `recurring-${event.id}`,
+                          element: (
+                            <div
+                              key={`recurring-${event.id}`}
+                              className="text-[10px] px-1 py-0.5 rounded bg-orange-500/20 text-orange-600 dark:text-orange-400 truncate"
+                              title={event.title}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {event.title}
+                            </div>
+                          ),
+                        });
+                      });
+
+                      // Add unscheduled tasks last
+                      dayTasks
+                        .filter(
+                          (t) =>
+                            !scheduledTasks.some((st) => st.task.id === t.id)
                         )
-                      )
-                      .map((task) => (
-                        <div
-                          key={task.id}
-                          className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground truncate"
-                          title={task.title}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {task.title}
-                        </div>
-                      ))}
+                        .forEach((task) => {
+                          allItems.push({
+                            type: "unscheduled",
+                            key: `unscheduled-${task.id}`,
+                            element: (
+                              <div
+                                key={`unscheduled-${task.id}`}
+                                className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground truncate"
+                                title={task.title}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {task.title}
+                              </div>
+                            ),
+                          });
+                        });
 
-                    {/* Outlook events */}
-                    {dayOutlookEvents.slice(0, 1).map((event) => (
-                      <div
-                        key={event.id}
-                        className="text-[10px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-600 dark:text-blue-400 truncate"
-                        title={event.subject}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {event.subject}
-                      </div>
-                    ))}
+                      const itemsToShow = allItems.slice(0, MAX_ITEMS);
+                      const remainingCount = allItems.length - MAX_ITEMS;
 
-                    {/* Recurring events */}
-                    {dayRecurringEvents.slice(0, 1).map(({ event }) => (
-                      <div
-                        key={event.id}
-                        className="text-[10px] px-1 py-0.5 rounded bg-orange-500/20 text-orange-600 dark:text-orange-400 truncate"
-                        title={event.title}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {event.title}
-                      </div>
-                    ))}
-
-                    {/* More indicator */}
-                    {totalItems > 3 && (
-                      <div className="text-[10px] text-muted-foreground px-1">
-                        +{totalItems - 3} more
-                      </div>
-                    )}
+                      return (
+                        <>
+                          {itemsToShow.map((item) => item.element)}
+                          {remainingCount > 0 && (
+                            <div className="text-[10px] text-muted-foreground px-1">
+                              +{remainingCount} more
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               );
@@ -458,7 +497,7 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
   }, [session?.user]);
 
   // Fetch Outlook events function
-  const fetchOutlookEvents = async () => {
+  const fetchOutlookEvents = useCallback(async () => {
     if (!session?.user) {
       setOutlookEvents([]);
       return;
@@ -466,12 +505,33 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
 
     setIsLoadingOutlookEvents(true);
     try {
-      // Convert dates to user's timezone for the query
-      const startDate = startOfDay(visibleDays[0]);
-      const endDate = addDays(
-        startOfDay(visibleDays[visibleDays.length - 1]),
-        1
-      ); // End of last visible day
+      // Calculate date range based on calendar mode to avoid closure issues
+      let startDate: Date;
+      let endDate: Date;
+
+      if (calendarMode === "month") {
+        // For month view, calculate from currentMonth
+        const monthStart = startOfMonth(currentMonth);
+        const monthEnd = endOfMonth(currentMonth);
+        const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+        const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+        startDate = startOfDay(calendarStart);
+        endDate = addDays(startOfDay(calendarEnd), 1);
+      } else {
+        // For day views, use startDay
+        const stepSize =
+          calendarMode === "1-day"
+            ? 1
+            : calendarMode === "3-day"
+            ? 3
+            : calendarMode === "7-day"
+            ? 7
+            : 1;
+        const firstDay = startDay;
+        const lastDay = addDays(startDay, stepSize - 1);
+        startDate = startOfDay(firstDay);
+        endDate = addDays(startOfDay(lastDay), 1);
+      }
 
       // Format dates in user's timezone for Outlook API
       const startDateTime = formatInTimeZone(
@@ -506,7 +566,7 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
     } finally {
       setIsLoadingOutlookEvents(false);
     }
-  };
+  }, [session?.user, calendarMode, currentMonth, startDay, userTimeZone]);
 
   // Get scheduled tasks hash to detect when calendar changes
   const scheduledTasksHash = tasks
@@ -587,9 +647,9 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
   // Fetch Outlook events when visible days change (initial load or navigation)
   useEffect(() => {
     fetchOutlookEvents();
-    // Use dayOffset and calendarMode instead of visibleDays to avoid infinite loops
+    // Use dayOffset, monthOffset, and calendarMode instead of visibleDays to avoid infinite loops
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dayOffset, calendarMode, session?.user?.id]);
+  }, [dayOffset, monthOffset, calendarMode, session?.user?.id]);
 
   // Refresh Outlook events when scheduled tasks change (when something is added/updated/deleted on calendar)
   // This only triggers when scheduled tasks actually change, not on every task update
