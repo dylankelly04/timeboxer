@@ -1561,6 +1561,21 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
                                   startDate,
                                   "h:mm a"
                                 )} - ${format(endDate, "h:mm a")}`}
+                                onDragOver={(e) => {
+                                  // Allow drag events to pass through to the hour slot
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  // Get the hour from the event's position
+                                  const eventHour = startDate.getHours();
+                                  handleDragOver(e, date, eventHour);
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  const eventHour = startDate.getHours();
+                                  handleDrop(e, date, eventHour);
+                                }}
+                                onDragLeave={handleDragLeave}
                               >
                                 <div className="font-medium truncate">
                                   {event.subject}
@@ -1622,6 +1637,10 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
                         const leftPercent = 1 + column * columnWidth;
                         const widthPercent = columnWidth - 0.5;
 
+                        // Get the hour from the recurring event's start time
+                        const recurringStartDate = new Date(startTime);
+                        const recurringHour = recurringStartDate.getHours();
+
                         return (
                           <ContextMenu
                             key={`recurring-${event.id}-${date.toISOString()}`}
@@ -1637,6 +1656,18 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
                                   zIndex: 1 + column, // Lower z-index so tasks appear on top
                                 }}
                                 title={`${event.title} (Recurring placeholder)\n${event.timeOfDay} - ${event.duration} min`}
+                                onDragOver={(e) => {
+                                  // Allow drag events to pass through to the hour slot
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleDragOver(e, date, recurringHour);
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleDrop(e, date, recurringHour);
+                                }}
+                                onDragLeave={handleDragLeave}
                               >
                                 <div className="flex items-start justify-between gap-1">
                                   <div className="min-w-0 flex-1">
@@ -1722,6 +1753,10 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
                         const leftPercent = 1 + column * columnWidth; // 1% left margin
                         const widthPercent = columnWidth - 0.5; // Small gap between columns
 
+                        // Get the hour from the task's start time for drag handling
+                        const taskStartDate = new Date(scheduledTime.startTime);
+                        const taskHour = taskStartDate.getHours();
+
                         return (
                           <ContextMenu key={`${task.id}-${scheduledTime.id}`}>
                             <ContextMenuTrigger asChild>
@@ -1747,6 +1782,18 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
                                   );
                                   e.dataTransfer.effectAllowed = "move";
                                 }}
+                                onDragOver={(e) => {
+                                  // Allow drag events to pass through so tasks can be dropped on top of other tasks
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleDragOver(e, date, taskHour);
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleDrop(e, date, taskHour);
+                                }}
+                                onDragLeave={handleDragLeave}
                                 className="absolute bg-primary text-primary-foreground rounded-md p-2 cursor-grab active:cursor-grabbing hover:bg-primary/90 transition-colors shadow-sm group z-10"
                                 style={{
                                   top: pos.top + 2,
