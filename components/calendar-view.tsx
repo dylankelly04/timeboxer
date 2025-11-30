@@ -934,11 +934,22 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
     const taskDurationStr = e.dataTransfer.getData("taskDuration");
     const taskDuration = taskDurationStr ? parseInt(taskDurationStr, 10) : 30;
 
-    // Calculate exact drop position to show accurate highlight
-    const hourSlot = e.currentTarget as HTMLElement;
-    const offsetY = e.nativeEvent.offsetY;
-    const slotTop = (hour - START_HOUR) * HOUR_HEIGHT;
-    const totalY = slotTop + offsetY;
+    // Find the day column element to calculate position relative to the calendar grid
+    const target = e.currentTarget as HTMLElement;
+    const dayColumn = target.closest(".flex-1.relative") as HTMLElement;
+
+    let totalY: number;
+    if (dayColumn) {
+      // Calculate position relative to the day column
+      const columnRect = dayColumn.getBoundingClientRect();
+      // Account for the top padding (GRID_VERTICAL_PADDING)
+      totalY = e.clientY - columnRect.top - GRID_VERTICAL_PADDING;
+    } else {
+      // Fallback to old behavior
+      const offsetY = e.nativeEvent.offsetY;
+      const slotTop = (hour - START_HOUR) * HOUR_HEIGHT;
+      totalY = slotTop + offsetY;
+    }
 
     // Convert Y position to exact hour (with decimals)
     const exactHour = Math.max(
@@ -968,16 +979,22 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
     if (taskId) {
       const task = tasks.find((t) => t.id === taskId);
 
-      // Calculate exact drop position to support half-hour increments
-      // The drop happens on the hour slot div, which is absolutely positioned
-      const hourSlot = e.currentTarget as HTMLElement;
+      // Find the day column element to calculate position relative to the calendar grid
+      const target = e.currentTarget as HTMLElement;
+      const dayColumn = target.closest(".flex-1.relative") as HTMLElement;
 
-      // Get the position within the hour slot (0 to HOUR_HEIGHT)
-      const offsetY = e.nativeEvent.offsetY;
-
-      // Calculate the total Y position: hour slot's top position + offset within slot
-      const slotTop = (hour - START_HOUR) * HOUR_HEIGHT;
-      const totalY = slotTop + offsetY;
+      let totalY: number;
+      if (dayColumn) {
+        // Calculate position relative to the day column
+        const columnRect = dayColumn.getBoundingClientRect();
+        // Account for the top padding (GRID_VERTICAL_PADDING)
+        totalY = e.clientY - columnRect.top - GRID_VERTICAL_PADDING;
+      } else {
+        // Fallback to old behavior
+        const offsetY = e.nativeEvent.offsetY;
+        const slotTop = (hour - START_HOUR) * HOUR_HEIGHT;
+        totalY = slotTop + offsetY;
+      }
 
       // Convert Y position to exact hour (with decimals)
       const exactHour = Math.max(
