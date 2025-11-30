@@ -434,14 +434,24 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
   } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Get user's timezone
-  const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Get user's timezone - ensure it's calculated after mount
+  const [userTimeZone, setUserTimeZone] = useState<string>(() =>
+    typeof window !== "undefined"
+      ? Intl.DateTimeFormat().resolvedOptions().timeZone
+      : "UTC"
+  );
 
-  // Current time state - update after mount to ensure correct timezone
-  const [now, setNow] = useState<Date>(() => new Date());
+  // Current time state - initialize as null, set after mount to ensure correct timezone
+  const [now, setNow] = useState<Date | null>(null);
 
   // Update current time after mount and periodically
   useEffect(() => {
+    // Ensure timezone is correctly detected
+    if (typeof window !== "undefined") {
+      const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      setUserTimeZone(detectedTimezone);
+    }
+
     // Update immediately after mount to ensure correct timezone
     setNow(new Date());
 
@@ -1505,6 +1515,7 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
                 const recurringEventsWithLayout =
                   calendarLayout.recurringEvents;
                 const currentTimeTop =
+                  now &&
                   isToday(date) &&
                   now.getHours() >= START_HOUR &&
                   now.getHours() < END_HOUR
