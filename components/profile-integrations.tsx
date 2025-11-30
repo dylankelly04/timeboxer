@@ -38,9 +38,9 @@ export function ProfileIntegrations({ onSignOut }: ProfileIntegrationsProps) {
 
   const handleSignOut = async () => {
     if (onSignOut) {
-      onSignOut();
+      await onSignOut();
     } else {
-      await signOut({ redirect: false });
+      await signOut({ callbackUrl: window.location.origin });
     }
   };
 
