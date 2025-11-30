@@ -113,14 +113,10 @@ function MonthView({
   const getOutlookEventsForDate = (date: Date) => {
     const dateStr = format(date, "yyyy-MM-dd");
     return outlookEvents.filter((event) => {
-      // The datetime from Outlook is already in the user's timezone (requested via Prefer header)
-      // So we just parse it directly without adding "Z"
-      const eventTimeZone = event.start.timeZone || userTimeZone;
-      const eventStart = toZonedTime(
-        new Date(event.start.dateTime),
-        eventTimeZone
-      );
-      return format(eventStart, "yyyy-MM-dd") === dateStr;
+      // The datetime from Outlook is already in the user's requested timezone
+      // Just extract the date part directly from the datetime string
+      const eventDateStr = event.start.dateTime.split("T")[0];
+      return eventDateStr === dateStr;
     });
   };
 
