@@ -715,42 +715,86 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
     return result;
   };
 
-  // Calculate layout for overlapping tasks - returns tasks with column and total columns info
-  const getScheduledTasksWithLayout = (date: Date) => {
+  // Generic type for calendar items with time info
+  type CalendarItem = {
+    id: string;
+    type: "task" | "outlook" | "recurring";
+    startTime: number; // timestamp
+    endTime: number; // timestamp
+    data: any;
+  };
+
+  // Calculate layout for all overlapping calendar items
+  const getCalendarLayoutForDate = (date: Date) => {
     const scheduledTasks = getScheduledTasksForDate(date);
+    const dayOutlookEvents = getOutlookEventsForDate(date);
+    const dayRecurringEvents = getRecurringEventsForDate(date);
 
-    if (scheduledTasks.length === 0) return [];
+    // Convert all items to a common format
+    const allItems: CalendarItem[] = [];
 
-    // Sort by start time
-    const sorted = [...scheduledTasks].sort((a, b) => {
-      return (
-        new Date(a.scheduledTime.startTime).getTime() -
-        new Date(b.scheduledTime.startTime).getTime()
-      );
+    // Add scheduled tasks
+    scheduledTasks.forEach(({ task, scheduledTime }) => {
+      const startTime = new Date(scheduledTime.startTime).getTime();
+      const endTime = startTime + scheduledTime.duration * 60 * 1000;
+      allItems.push({
+        id: `task-${scheduledTime.id}`,
+        type: "task",
+        startTime,
+        endTime,
+        data: { task, scheduledTime },
+      });
     });
 
+    // Add Outlook events
+    dayOutlookEvents.forEach((event) => {
+      const eventTimeZone = event.start.timeZone || userTimeZone;
+      const startDate = toZonedTime(
+        new Date(event.start.dateTime),
+        eventTimeZone
+      );
+      const endDate = toZonedTime(new Date(event.end.dateTime), eventTimeZone);
+      allItems.push({
+        id: `outlook-${event.id}`,
+        type: "outlook",
+        startTime: startDate.getTime(),
+        endTime: endDate.getTime(),
+        data: event,
+      });
+    });
+
+    // Add recurring events
+    dayRecurringEvents.forEach(({ event, startTime }) => {
+      const start = new Date(startTime).getTime();
+      const end = start + event.duration * 60 * 1000;
+      allItems.push({
+        id: `recurring-${event.id}`,
+        type: "recurring",
+        startTime: start,
+        endTime: end,
+        data: { event, startTime },
+      });
+    });
+
+    if (allItems.length === 0)
+      return { tasks: [], outlookEvents: [], recurringEvents: [] };
+
+    // Sort by start time
+    allItems.sort((a, b) => a.startTime - b.startTime);
+
     // Calculate overlapping groups and assign columns
-    const result: Array<{
-      task: Task;
-      scheduledTime: { id: string; startTime: string; duration: number };
-      column: number;
-      totalColumns: number;
-    }> = [];
+    const columns: Array<{ endTime: number }> = [];
+    const itemsWithLayout: Array<
+      CalendarItem & { column: number; totalColumns: number }
+    > = [];
 
-    // Track which columns are occupied at any given time
-    const columns: Array<{ endTime: number; index: number }> = [];
-
-    for (const item of sorted) {
-      const startTime = new Date(item.scheduledTime.startTime).getTime();
-      const endTime = startTime + item.scheduledTime.duration * 60 * 1000;
-
+    for (const item of allItems) {
       // Find the first available column
       let column = 0;
       for (let i = 0; i < columns.length; i++) {
-        if (columns[i].endTime <= startTime) {
-          // This column is free
+        if (columns[i].endTime <= item.startTime) {
           column = i;
-          columns[i].endTime = endTime;
+          columns[i].endTime = item.endTime;
           break;
         }
         column = i + 1;
@@ -758,41 +802,64 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
 
       // If no free column found, add a new one
       if (column >= columns.length) {
-        columns.push({ endTime, index: column });
+        columns.push({ endTime: item.endTime });
       } else {
-        columns[column].endTime = endTime;
+        columns[column].endTime = item.endTime;
       }
 
-      result.push({
+      itemsWithLayout.push({
         ...item,
         column,
-        totalColumns: 0, // Will be calculated in second pass
+        totalColumns: 0,
       });
     }
 
     // Second pass: calculate total columns for each overlapping group
-    for (let i = 0; i < result.length; i++) {
-      const item = result[i];
-      const itemStart = new Date(item.scheduledTime.startTime).getTime();
-      const itemEnd = itemStart + item.scheduledTime.duration * 60 * 1000;
-
-      // Find all items that overlap with this one
+    for (let i = 0; i < itemsWithLayout.length; i++) {
+      const item = itemsWithLayout[i];
       let maxColumn = item.column;
-      for (let j = 0; j < result.length; j++) {
-        const other = result[j];
-        const otherStart = new Date(other.scheduledTime.startTime).getTime();
-        const otherEnd = otherStart + other.scheduledTime.duration * 60 * 1000;
 
+      for (let j = 0; j < itemsWithLayout.length; j++) {
+        const other = itemsWithLayout[j];
         // Check if they overlap
-        if (itemStart < otherEnd && itemEnd > otherStart) {
+        if (item.startTime < other.endTime && item.endTime > other.startTime) {
           maxColumn = Math.max(maxColumn, other.column);
         }
       }
 
-      result[i].totalColumns = maxColumn + 1;
+      itemsWithLayout[i].totalColumns = maxColumn + 1;
     }
 
-    return result;
+    // Separate back into types
+    const tasks = itemsWithLayout
+      .filter((item) => item.type === "task")
+      .map((item) => ({
+        ...item.data,
+        column: item.column,
+        totalColumns: item.totalColumns,
+      }));
+
+    const outlookEventsWithLayout = itemsWithLayout
+      .filter((item) => item.type === "outlook")
+      .map((item) => ({
+        event: item.data as OutlookEvent,
+        column: item.column,
+        totalColumns: item.totalColumns,
+      }));
+
+    const recurringEventsWithLayout = itemsWithLayout
+      .filter((item) => item.type === "recurring")
+      .map((item) => ({
+        ...item.data,
+        column: item.column,
+        totalColumns: item.totalColumns,
+      }));
+
+    return {
+      tasks,
+      outlookEvents: outlookEventsWithLayout,
+      recurringEvents: recurringEventsWithLayout,
+    };
   };
 
   const getOutlookEventsForDate = (date: Date) => {
@@ -1342,7 +1409,11 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
 
               {/* Day columns */}
               {visibleDays.map((date, dayIndex) => {
-                const scheduledTasks = getScheduledTasksWithLayout(date);
+                const calendarLayout = getCalendarLayoutForDate(date);
+                const scheduledTasks = calendarLayout.tasks;
+                const outlookEventsWithLayout = calendarLayout.outlookEvents;
+                const recurringEventsWithLayout =
+                  calendarLayout.recurringEvents;
                 const currentTimeTop =
                   isToday(date) &&
                   now.getHours() >= START_HOUR &&
@@ -1452,90 +1523,104 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
                     )}
 
                     {/* Outlook events */}
-                    {getOutlookEventsForDate(date).map((event) => {
-                      const pos = getOutlookEventPosition(event);
-                      if (!pos) return null;
+                    {outlookEventsWithLayout.map(
+                      ({ event, column, totalColumns }) => {
+                        const pos = getOutlookEventPosition(event);
+                        if (!pos) return null;
 
-                      // Convert event times to user's timezone for display
-                      const eventTimeZone =
-                        event.start.timeZone || userTimeZone;
-                      const startDate = toZonedTime(
-                        new Date(event.start.dateTime),
-                        eventTimeZone
-                      );
-                      const endDate = toZonedTime(
-                        new Date(event.end.dateTime),
-                        eventTimeZone
-                      );
+                        // Convert event times to user's timezone for display
+                        const eventTimeZone =
+                          event.start.timeZone || userTimeZone;
+                        const startDate = toZonedTime(
+                          new Date(event.start.dateTime),
+                          eventTimeZone
+                        );
+                        const endDate = toZonedTime(
+                          new Date(event.end.dateTime),
+                          eventTimeZone
+                        );
 
-                      return (
-                        <ContextMenu key={event.id}>
-                          <ContextMenuTrigger asChild>
-                            <div
-                              className="absolute left-1 right-1 rounded px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-900 dark:text-blue-100 overflow-hidden"
-                              style={{
-                                top: pos.top,
-                                height: Math.max(pos.height, 20),
-                                zIndex: 5,
-                              }}
-                              title={`${event.subject}\n${format(
-                                startDate,
-                                "h:mm a"
-                              )} - ${format(endDate, "h:mm a")}`}
-                            >
-                              <div className="font-medium truncate">
-                                {event.subject}
+                        // Calculate width and left position based on overlapping columns
+                        const columnWidth = (100 - 2) / totalColumns;
+                        const leftPercent = 1 + column * columnWidth;
+                        const widthPercent = columnWidth - 0.5;
+
+                        return (
+                          <ContextMenu key={event.id}>
+                            <ContextMenuTrigger asChild>
+                              <div
+                                className="absolute rounded px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-900 dark:text-blue-100 overflow-hidden"
+                                style={{
+                                  top: pos.top,
+                                  height: Math.max(pos.height, 20),
+                                  left: `${leftPercent}%`,
+                                  width: `${widthPercent}%`,
+                                  zIndex: 5 + column,
+                                }}
+                                title={`${event.subject}\n${format(
+                                  startDate,
+                                  "h:mm a"
+                                )} - ${format(endDate, "h:mm a")}`}
+                              >
+                                <div className="font-medium truncate">
+                                  {event.subject}
+                                </div>
+                                <div className="text-[10px] opacity-75">
+                                  {format(startDate, "h:mm a")} -{" "}
+                                  {format(endDate, "h:mm a")}
+                                </div>
                               </div>
-                              <div className="text-[10px] opacity-75">
-                                {format(startDate, "h:mm a")} -{" "}
-                                {format(endDate, "h:mm a")}
-                              </div>
-                            </div>
-                          </ContextMenuTrigger>
-                          <ContextMenuContent>
-                            <ContextMenuItem
-                              onClick={async () => {
-                                try {
-                                  const response = await fetch(
-                                    `/api/outlook/events/${event.id}`,
-                                    { method: "DELETE" }
-                                  );
-                                  if (response.ok) {
-                                    await fetchOutlookEvents();
-                                  } else {
-                                    const errorData = await response
-                                      .json()
-                                      .catch(() => ({}));
+                            </ContextMenuTrigger>
+                            <ContextMenuContent>
+                              <ContextMenuItem
+                                onClick={async () => {
+                                  try {
+                                    const response = await fetch(
+                                      `/api/outlook/events/${event.id}`,
+                                      { method: "DELETE" }
+                                    );
+                                    if (response.ok) {
+                                      await fetchOutlookEvents();
+                                    } else {
+                                      const errorData = await response
+                                        .json()
+                                        .catch(() => ({}));
+                                      alert(
+                                        `Failed to delete: ${
+                                          errorData.error || "Unknown error"
+                                        }`
+                                      );
+                                    }
+                                  } catch (error) {
+                                    console.error(
+                                      "Error deleting Outlook event:",
+                                      error
+                                    );
                                     alert(
-                                      `Failed to delete: ${
-                                        errorData.error || "Unknown error"
-                                      }`
+                                      "Failed to delete event. Please try again."
                                     );
                                   }
-                                } catch (error) {
-                                  console.error(
-                                    "Error deleting Outlook event:",
-                                    error
-                                  );
-                                  alert(
-                                    "Failed to delete event. Please try again."
-                                  );
-                                }
-                              }}
-                            >
-                              <Trash2 className="mr-2 h-3.5 w-3.5" />
-                              Delete
-                            </ContextMenuItem>
-                          </ContextMenuContent>
-                        </ContextMenu>
-                      );
-                    })}
+                                }}
+                              >
+                                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                Delete
+                              </ContextMenuItem>
+                            </ContextMenuContent>
+                          </ContextMenu>
+                        );
+                      }
+                    )}
 
                     {/* Recurring events (orange, translucent, visual placeholder only) */}
-                    {getRecurringEventsForDate(date).map(
-                      ({ event, startTime }) => {
+                    {recurringEventsWithLayout.map(
+                      ({ event, startTime, column, totalColumns }) => {
                         const pos = getTaskPosition(startTime, event.duration);
                         if (!pos) return null;
+
+                        // Calculate width and left position based on overlapping columns
+                        const columnWidth = (100 - 2) / totalColumns;
+                        const leftPercent = 1 + column * columnWidth;
+                        const widthPercent = columnWidth - 0.5;
 
                         return (
                           <ContextMenu
@@ -1543,11 +1628,13 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
                           >
                             <ContextMenuTrigger asChild>
                               <div
-                                className="absolute left-1 right-1 bg-orange-500/30 dark:bg-orange-600/30 text-orange-900 dark:text-orange-100 rounded-md p-2 shadow-sm"
+                                className="absolute bg-orange-500/30 dark:bg-orange-600/30 text-orange-900 dark:text-orange-100 rounded-md p-2 shadow-sm"
                                 style={{
                                   top: pos.top + 2,
                                   height: Math.max(pos.height - 4, 24),
-                                  zIndex: 1, // Lower z-index so tasks appear on top
+                                  left: `${leftPercent}%`,
+                                  width: `${widthPercent}%`,
+                                  zIndex: 1 + column, // Lower z-index so tasks appear on top
                                 }}
                                 title={`${event.title} (Recurring placeholder)\n${event.timeOfDay} - ${event.duration} min`}
                               >
@@ -1616,12 +1703,14 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
                         // Use resizing state if this task is being resized
                         const isResizing =
                           resizingTask?.scheduledTimeId === scheduledTime.id;
-                        const displayStartTime = isResizing
-                          ? resizingTask.startTime
-                          : scheduledTime.startTime;
-                        const displayDuration = isResizing
-                          ? resizingTask.duration
-                          : scheduledTime.duration;
+                        const displayStartTime =
+                          isResizing && resizingTask
+                            ? resizingTask.startTime
+                            : scheduledTime.startTime;
+                        const displayDuration =
+                          isResizing && resizingTask
+                            ? resizingTask.duration
+                            : scheduledTime.duration;
                         const pos = getTaskPosition(
                           displayStartTime,
                           displayDuration
