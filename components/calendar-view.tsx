@@ -437,6 +437,22 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
   // Get user's timezone
   const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+  // Current time state - update after mount to ensure correct timezone
+  const [now, setNow] = useState<Date>(() => new Date());
+
+  // Update current time after mount and periodically
+  useEffect(() => {
+    // Update immediately after mount to ensure correct timezone
+    setNow(new Date());
+
+    // Update every minute to keep the indicator accurate
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, []);
+
   const today = startOfDay(new Date());
   const startDay = addDays(today, dayOffset);
 
@@ -1312,8 +1328,6 @@ export function CalendarView({ onAddTask, width }: CalendarViewProps = {}) {
     const height = (duration / 60) * HOUR_HEIGHT;
     return { top, height };
   };
-
-  const now = new Date();
 
   return (
     <div
