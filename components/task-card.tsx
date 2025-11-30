@@ -278,15 +278,15 @@ export function TaskCard({
         )}
       </div>
 
-      {/* Progress bar for tasks with completed time - full width */}
-      {hasProgress && (
-        <div className="m-1 h-1 bg-muted rounded-full overflow-hidden">
+      {/* Progress bar - always show for consistent spacing, but only fill when there's progress */}
+      <div className="m-1 h-1 bg-muted rounded-full overflow-hidden">
+        {hasProgress && (
           <div
             className="h-full bg-green-500 transition-all duration-300"
             style={{ width: `${progressPercent}%` }}
           />
-        </div>
-      )}
+        )}
+      </div>
     </Card>
   );
 }
