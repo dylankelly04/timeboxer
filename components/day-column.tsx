@@ -98,6 +98,15 @@ export function DayColumn({
     }
   };
 
+  const handleBackgroundDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Ignore double-clicks that originate from buttons, task cards, or other interactive elements
+    const target = e.target as HTMLElement;
+    if (target.closest("button") || target.closest('[draggable="true"]')) {
+      return;
+    }
+    onAddTask(date);
+  };
+
   return (
     <div
       className="flex-1 min-w-[200px] h-full flex flex-col border-r border-border last:border-r-0 bg-card/50"
@@ -144,7 +153,10 @@ export function DayColumn({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-3">
+      <div
+        className="flex-1 overflow-y-auto p-2 space-y-3"
+        onDoubleClick={handleBackgroundDoubleClick}
+      >
         {/* Rollover tasks - tasks from previous days that weren't completed */}
         {rolloverTasks.length > 0 && (
           <div className="space-y-2">
@@ -246,24 +258,22 @@ export function DayColumn({
                       const response = await fetch(
                         `/api/reminders/${reminder.id}`,
                         { method: "DELETE" }
-                      )
+                      );
                       if (response.ok) {
-                        window.dispatchEvent(new Event("reminderUpdated"))
+                        window.dispatchEvent(new Event("reminderUpdated"));
                       } else {
                         const errorData = await response
                           .json()
-                          .catch(() => ({}))
+                          .catch(() => ({}));
                         alert(
                           `Failed to delete: ${
                             errorData.error || "Unknown error"
                           }`
-                        )
+                        );
                       }
                     } catch (error) {
-                      console.error("Error deleting reminder:", error)
-                      alert(
-                        "Failed to delete reminder. Please try again."
-                      )
+                      console.error("Error deleting reminder:", error);
+                      alert("Failed to delete reminder. Please try again.");
                     }
                   }}
                 >
