@@ -306,14 +306,55 @@ function MonthView({
                           type: "reminder",
                           key: `reminder-${reminder.id}`,
                           element: (
-                            <div
-                              key={`reminder-${reminder.id}`}
-                              className="text-[10px] px-1 py-0.5 rounded bg-red-500/30 text-red-600 dark:text-red-400 truncate"
-                              title={reminder.text}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {reminder.text}
-                            </div>
+                            <ContextMenu key={`reminder-${reminder.id}`}>
+                              <ContextMenuTrigger asChild>
+                                <div
+                                  className="text-[10px] px-1 py-0.5 rounded bg-red-500/30 text-red-600 dark:text-red-400 truncate cursor-pointer"
+                                  title={reminder.text}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {reminder.text}
+                                </div>
+                              </ContextMenuTrigger>
+                              <ContextMenuContent>
+                                <ContextMenuItem
+                                  onClick={async (e) => {
+                                    e.stopPropagation()
+                                    try {
+                                      const response = await fetch(
+                                        `/api/reminders/${reminder.id}`,
+                                        { method: "DELETE" }
+                                      )
+                                      if (response.ok) {
+                                        window.dispatchEvent(
+                                          new Event("reminderUpdated")
+                                        )
+                                      } else {
+                                        const errorData = await response
+                                          .json()
+                                          .catch(() => ({}))
+                                        alert(
+                                          `Failed to delete: ${
+                                            errorData.error || "Unknown error"
+                                          }`
+                                        )
+                                      }
+                                    } catch (error) {
+                                      console.error(
+                                        "Error deleting reminder:",
+                                        error
+                                      )
+                                      alert(
+                                        "Failed to delete reminder. Please try again."
+                                      )
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                  Delete
+                                </ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
                           ),
                         });
                       });

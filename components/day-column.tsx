@@ -11,12 +11,18 @@ import {
   isBefore,
   isSameDay,
 } from "date-fns";
-import { Plus, Bell } from "lucide-react";
+import { Plus, Bell, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TaskCard } from "./task-card";
 import { cn } from "@/lib/utils";
 import type { Task, Reminder } from "@/lib/types";
 import { useTasks } from "@/lib/task-context";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 interface DayColumnProps {
   date: Date;
@@ -222,15 +228,50 @@ export function DayColumn({
       {reminders.length > 0 && (
         <div className="px-2 py-2 border-t border-border space-y-1">
           {reminders.map((reminder) => (
-            <div
-              key={reminder.id}
-              className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-red-500/20 text-red-600 dark:text-red-400 text-xs cursor-pointer hover:bg-red-500/30 transition-colors"
-              onClick={() => onEditReminder?.(reminder)}
-              title={`${reminder.startDate} - ${reminder.endDate}`}
-            >
-              <Bell className="h-3 w-3 shrink-0" />
-              <span className="truncate">{reminder.text}</span>
-            </div>
+            <ContextMenu key={reminder.id}>
+              <ContextMenuTrigger asChild>
+                <div
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-red-500/20 text-red-600 dark:text-red-400 text-xs cursor-pointer hover:bg-red-500/30 transition-colors"
+                  onClick={() => onEditReminder?.(reminder)}
+                  title={`${reminder.startDate} - ${reminder.endDate}`}
+                >
+                  <Bell className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{reminder.text}</span>
+                </div>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(
+                        `/api/reminders/${reminder.id}`,
+                        { method: "DELETE" }
+                      )
+                      if (response.ok) {
+                        window.dispatchEvent(new Event("reminderUpdated"))
+                      } else {
+                        const errorData = await response
+                          .json()
+                          .catch(() => ({}))
+                        alert(
+                          `Failed to delete: ${
+                            errorData.error || "Unknown error"
+                          }`
+                        )
+                      }
+                    } catch (error) {
+                      console.error("Error deleting reminder:", error)
+                      alert(
+                        "Failed to delete reminder. Please try again."
+                      )
+                    }
+                  }}
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  Delete
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           ))}
         </div>
       )}

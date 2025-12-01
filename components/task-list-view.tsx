@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect, useCallback } from "react"
 import { format, addDays, startOfDay, isBefore, isSameDay } from "date-fns"
-import { List, CalendarDays, Plus, ChevronLeft, ChevronRight, Bell } from "lucide-react"
+import { List, CalendarDays, Plus, ChevronLeft, ChevronRight, Bell, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TaskCard } from "./task-card"
 import { DayColumn } from "./day-column"
@@ -13,6 +13,12 @@ import { useTasks } from "@/lib/task-context"
 import type { Task, Reminder } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useSession } from "next-auth/react"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 
 type ViewMode = "all" | "by-day"
 
@@ -260,6 +266,24 @@ function AllTasksView({ scheduledTasks, pendingTasks, completedTasks, rolloverTa
   const todayStr = format(new Date(), "yyyy-MM-dd")
   const todaysReminders = reminders.filter((r) => r.startDate <= todayStr && r.endDate >= todayStr)
 
+  const handleDeleteReminder = async (reminderId: string) => {
+    try {
+      const response = await fetch(`/api/reminders/${reminderId}`, {
+        method: "DELETE",
+      })
+      if (response.ok) {
+        // Trigger reminder update event to refresh the list
+        window.dispatchEvent(new Event("reminderUpdated"))
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        alert(`Failed to delete: ${errorData.error || "Unknown error"}`)
+      }
+    } catch (error) {
+      console.error("Error deleting reminder:", error)
+      alert("Failed to delete reminder. Please try again.")
+    }
+  }
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = "move"
@@ -329,15 +353,28 @@ function AllTasksView({ scheduledTasks, pendingTasks, completedTasks, rolloverTa
       {todaysReminders.length > 0 && (
         <div className="px-3 py-2 border-t border-border space-y-1">
           {todaysReminders.map((reminder) => (
-            <div
-              key={reminder.id}
-              className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-red-500/20 text-red-600 dark:text-red-400 text-xs cursor-pointer hover:bg-red-500/30 transition-colors"
-              onClick={() => onEditReminder(reminder)}
-              title={`${reminder.startDate} - ${reminder.endDate}`}
-            >
-              <Bell className="h-3 w-3 shrink-0" />
-              <span className="truncate">{reminder.text}</span>
-            </div>
+            <ContextMenu key={reminder.id}>
+              <ContextMenuTrigger asChild>
+                <div
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-red-500/20 text-red-600 dark:text-red-400 text-xs cursor-pointer hover:bg-red-500/30 transition-colors"
+                  onClick={() => onEditReminder(reminder)}
+                  title={`${reminder.startDate} - ${reminder.endDate}`}
+                >
+                  <Bell className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{reminder.text}</span>
+                </div>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem
+                  onClick={async () => {
+                    await handleDeleteReminder(reminder.id)
+                  }}
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  Delete
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           ))}
         </div>
       )}
