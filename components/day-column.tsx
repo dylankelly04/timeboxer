@@ -219,7 +219,7 @@ export function DayColumn({
           completedTasks.length === 0 &&
           rolloverTasks.length === 0 && (
             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-              <p className="text-xs">No tasks</p>
+              <p className="text-xs">Double click to add a task</p>
             </div>
           )}
       </div>
