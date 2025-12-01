@@ -294,12 +294,24 @@ function AllTasksView({ scheduledTasks, pendingTasks, completedTasks, rolloverTa
 
   const totalTasks = scheduledTasks.length + pendingTasks.length + completedTasks.length + rolloverTasks.length
 
+  const handleBackgroundDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Ignore double-clicks that originate from buttons or other interactive elements
+    const target = e.target as HTMLElement
+    if (target.closest("button")) {
+      return
+    }
+    onAddTask()
+  }
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden" onDragOver={handleDragOver} onDrop={handleDrop}>
       <div className="px-4 py-2 text-xs text-muted-foreground border-b border-border bg-card/50">
         {totalTasks} task{totalTasks !== 1 ? "s" : ""}
       </div>
-      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+      <div
+        className="flex-1 overflow-y-auto p-3 space-y-4"
+        onDoubleClick={handleBackgroundDoubleClick}
+      >
         <TaskSection title="Rollover" tasks={rolloverTasks} emptyMessage="No rollover tasks" isRollover />
         <TaskSection title="Scheduled" tasks={scheduledTasks} emptyMessage="No scheduled tasks" />
         <TaskSection title="Pending" tasks={pendingTasks} emptyMessage="No pending tasks" />
