@@ -16,6 +16,10 @@
 # next.js
 /.next/
 /out/
+/frontend/.next/
+/frontend/out/
+/backend/.next/
+/backend/out/
 
 # production
 /build
@@ -39,10 +43,9 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
 
 # database
 *.db
 *.db-journal
 dev.db
-
+backend/dev.db

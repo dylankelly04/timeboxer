@@ -1,111 +1,94 @@
 # Timeboxer
 
-A simple, open-source timeboxing application built with Next.js. Timeboxer helps you manage your tasks by scheduling them on a calendar and tracking your work time.
+Timeboxer is a timeboxing app with a separate frontend and backend.
 
-## Features
+The frontend lives in `frontend/` and serves the UI. The backend lives in
+`backend/` and owns auth, API routes, database access, and Outlook
+integrations. The frontend proxies `/api/*` requests to the backend, so the
+existing browser contract stays intact.
 
-- **Task Management**: Create, edit, and organize tasks with time requirements
-- **Calendar View**: Drag and drop tasks onto a calendar to schedule them
-- **Outlook Integration**: Sync your scheduled tasks with Microsoft Outlook Calendar
-- **Recurring Events**: Set up daily recurring events that appear on your calendar
-- **Activity Tracking**: Visualize your work activity with a GitHub-style contribution graph
-- **Authentication**: Sign in with email/password or Google OAuth
-- **Dark Mode**: Built-in theme support
+## Apps
 
-## Tech Stack
+- `frontend/`: Next.js UI, components, styling, client-side task state.
+- `backend/`: Next.js API app, NextAuth handlers, Drizzle schema, database,
+  Outlook integration, and maintenance scripts.
 
-- **Framework**: Next.js 16 (App Router)
-- **Database**: SQLite (via Drizzle ORM) - supports both local and Turso cloud
-- **Authentication**: NextAuth.js v5
-- **UI**: React, Tailwind CSS, Radix UI components
-- **Calendar**: Custom calendar view with drag-and-drop support
+## Local Development
 
-## Getting Started
+1. Install dependencies at the repo root:
 
-### Prerequisites
-
-- Node.js 18+
-- npm, yarn, pnpm, or bun
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd timeboxer
-```
-
-2. Install dependencies:
 ```bash
 npm install
 ```
 
-3. Set up environment variables:
+2. Create a root env file:
+
 ```bash
 cp .env.example .env.local
 ```
 
-Edit `.env.local` and add your configuration:
-- `NEXTAUTH_SECRET`: Generate a random secret (e.g., `openssl rand -base64 32`)
-- `NEXTAUTH_URL`: Your app URL (e.g., `http://localhost:3000` for development)
-- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: For Google OAuth (optional)
-- `OUTLOOK_CLIENT_ID` and `OUTLOOK_CLIENT_SECRET`: For Outlook integration (optional)
-- `DATABASE_URL`: Database connection string
-  - For local: `file:./dev.db`
-  - For Turso: `libsql://your-database-url`
-- `TURSO_AUTH_TOKEN`: Required if using Turso database
+3. Fill in the backend-related values in `.env.local`:
 
-4. Set up the database:
+- `NEXTAUTH_SECRET`
+- `NEXTAUTH_URL=http://localhost:3000`
+- `DATABASE_URL=file:./dev.db` or a Turso `libsql://...` URL
+- `TURSO_AUTH_TOKEN` when using Turso
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` if you want Google sign-in
+- `OUTLOOK_CLIENT_ID` / `OUTLOOK_CLIENT_SECRET` for Outlook integration
+- `OUTLOOK_REDIRECT_URI=http://localhost:3000/api/auth/outlook/callback`
+
+`BACKEND_URL` is optional for the root scripts. They default the frontend proxy
+to `http://localhost:4000`.
+
+4. Push the schema:
+
 ```bash
 npm run db:push
 ```
 
-5. Run the development server:
+5. Start both apps:
+
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Frontend: `http://localhost:3000`
+Backend: `http://localhost:4000`
 
-## Database Setup
+## Useful Commands
 
-Timeboxer supports two database options:
-
-### Local SQLite (Self-hosted)
-Set `DATABASE_URL=file:./dev.db` in your `.env.local`. The database file will be created automatically.
-
-### Turso (Cloud)
-1. Create a database at [turso.tech](https://turso.tech)
-2. Set `DATABASE_URL=libsql://your-database-url`
-3. Set `TURSO_AUTH_TOKEN=your-auth-token`
+- `npm run dev`: start frontend and backend together
+- `npm run dev:frontend`: start only the frontend app
+- `npm run dev:backend`: start only the backend app
+- `npm run build`: build both apps
+- `npm run start:frontend`: start the built frontend on port 3000
+- `npm run start:backend`: start the built backend on port 4000
+- `npm run typecheck`: run TypeScript checks for both apps
+- `npm run db:push`: push the backend schema
+- `npm run db:generate`: generate backend migrations
 
 ## Project Structure
 
-```
+```text
 timeboxer/
-├── app/                    # Next.js app directory
-│   ├── api/               # API routes
-│   ├── layout.tsx         # Root layout
-│   └── page.tsx           # Home page
-├── components/            # React components
-│   ├── ui/               # Reusable UI components
-│   └── ...               # Feature components
-├── lib/                   # Utility functions
-│   ├── auth.ts           # NextAuth configuration
-│   ├── db.ts             # Database connection
-│   └── ...               # Other utilities
-├── drizzle/              # Database schema and migrations
-└── public/               # Static assets
+├── frontend/
+│   ├── app/
+│   ├── components/
+│   ├── lib/
+│   └── public/
+├── backend/
+│   ├── app/api/
+│   ├── drizzle/
+│   ├── lib/
+│   ├── scripts/
+│   └── types/
+└── scripts/
 ```
 
-## Development
+## Notes
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run start` - Start production server
-- `npm run db:push` - Push database schema changes
-- `npm run db:generate` - Generate database migrations
-
-## License
-
-This project is open source and available under the MIT License.
+- The backend still uses Next.js route handlers, but it now runs as its own app.
+- The frontend still uses `next-auth/react`, with auth requests proxied to the
+  backend app.
+- Root helper scripts load `.env.local` once and pass it to whichever app they
+  start.

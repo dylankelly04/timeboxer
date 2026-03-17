@@ -1,15 +1,24 @@
 {
-  "name": "my-v0-project",
+  "name": "timeboxer",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint .",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "dev": "node scripts/dev.mjs",
+    "dev:frontend": "node scripts/run-next.mjs frontend dev 3000",
+    "dev:backend": "node scripts/run-next.mjs backend dev 4000",
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "node scripts/run-next.mjs frontend build",
+    "build:backend": "node scripts/run-next.mjs backend build",
+    "start": "node scripts/dev.mjs start",
+    "start:frontend": "node scripts/run-next.mjs frontend start 3000",
+    "start:backend": "node scripts/run-next.mjs backend start 4000",
+    "lint": "npm run typecheck",
+    "typecheck": "node ./node_modules/typescript/bin/tsc -p frontend/tsconfig.json --noEmit && node ./node_modules/typescript/bin/tsc -p backend/tsconfig.json --noEmit",
+    "db:generate": "node scripts/run-drizzle.mjs generate",
+    "db:migrate": "node scripts/run-drizzle.mjs migrate",
+    "db:push": "node scripts/run-drizzle.mjs push",
+    "db:create-reminders-table": "node scripts/run-backend-script.mjs scripts/create_reminders_table.cjs",
+    "db:migrate-task-history": "node scripts/run-backend-script.mjs scripts/migrate_task_history.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
